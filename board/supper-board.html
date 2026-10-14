@@ -1,0 +1,847 @@
+<title>Supper Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&display=swap">
+<style>
+/* Layout: one narrow phone column, tabbed by a bottom bar; meal details open in a bottom sheet. Palette: diner menu, tomato red and butter yellow on warm paper. Light only, by choice. */
+:root{
+  --bg:#FBF4EA; --surface:#FFFCF6; --sunk:#F2E7D7; --ink:#2C1D15; --muted:#7A6354; --line:#E9D9C6;
+  --basil:#B5322A; --basil-soft:#FBE4D9; --on-basil:#FFF8F0;
+  --ice:#3A7194; --ice-soft:#E2EDF3;
+  --honey:#A47604; --honey-soft:#FCEEC2; --star-off:#D6BFA0;
+  --danger:#A8382C;
+  --f-display:"Bricolage Grotesque","Avenir Next","Segoe UI",system-ui,sans-serif;
+  --f-body:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --r:14px; --nav-h:64px; color-scheme:light;
+}
+html,body{background:var(--bg)}
+body{color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.45;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--basil);outline-offset:2px;border-radius:6px}
+.wrap{max-width:560px;margin:0 auto;padding-inline:16px;padding-block:20px calc(var(--nav-h) + 32px + env(safe-area-inset-bottom,0px))}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;letter-spacing:-.01em}
+h1{font-size:2rem;font-weight:800;line-height:1.05}
+h2{font-size:1.15rem;font-weight:700}
+.eyebrow{font-size:.75rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.muted{color:var(--muted)}
+.stack{display:flex;flex-direction:column;gap:12px}
+.section{display:flex;flex-direction:column;gap:10px;margin-top:28px}
+.section-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.view[hidden]{display:none!important}
+.checks{height:8px;border-radius:2px;margin-bottom:16px;background:repeating-conic-gradient(var(--basil) 0 25%,var(--surface) 0 50%) 0 0/8px 8px;opacity:.9}
+.topline{position:relative;display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin-bottom:16px}
+.planrange{font-size:.8rem;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
+
+/* chips */
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:999px;white-space:nowrap}
+.chip.cook{background:var(--basil);color:var(--on-basil)}
+.chip.leftovers{background:var(--sunk);color:var(--muted)}
+.chip.flex{background:transparent;color:var(--muted);box-shadow:inset 0 0 0 1px var(--line)}
+.chip.ice{background:var(--ice-soft);color:var(--ice)}
+
+/* tonight card */
+.tonight{background:var(--surface);border-radius:var(--r);padding:18px;display:flex;flex-direction:column;gap:10px;border:1px solid var(--line);text-align:left;width:100%}
+.tonight .meal-title{font-family:var(--f-display);font-size:1.6rem;font-weight:700;line-height:1.1;text-wrap:balance}
+.tonight .meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.tonight p{margin:0;color:var(--muted)}
+
+/* thaw banner */
+.thaw{display:flex;gap:12px;align-items:flex-start;background:var(--ice-soft);color:var(--ink);border-radius:var(--r);padding:14px 16px}
+.thaw .ico{flex:none;width:28px;height:28px;color:var(--ice)}
+.thaw .body{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.thaw strong{color:var(--ice)}
+.thaw.late{background:var(--honey-soft)}
+.thaw.late .ico,.thaw.late strong{color:var(--honey)}
+
+/* buttons */
+.btn{border:0;border-radius:10px;padding:10px 14px;font-weight:700;background:var(--basil);color:var(--on-basil);min-height:44px}
+.btn.ghost{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
+.btn.small{min-height:36px;padding:6px 12px;font-size:.9rem}
+.btn.ice{background:var(--ice);color:var(--surface)}
+.iconbtn{border:0;background:transparent;color:var(--muted);width:36px;height:36px;border-radius:8px;display:inline-grid;place-items:center;flex:none}
+.iconbtn:hover{background:var(--sunk);color:var(--ink)}
+
+/* add form */
+.addform{display:flex;gap:8px}
+.addform input{flex:1;min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 12px;min-height:44px}
+.addform input::placeholder{color:var(--muted)}
+
+/* stars */
+.stars{display:inline-flex;gap:2px}
+.star{border:0;background:transparent;padding:4px;width:36px;height:36px;display:grid;place-items:center;color:var(--star-off)}
+.star.on{color:var(--honey)}
+.star svg{width:24px;height:24px}
+.stars.mini .star{width:auto;height:auto;padding:0}
+.stars.mini .star svg{width:14px;height:14px}
+.rate{background:var(--honey-soft);border-radius:var(--r);padding:14px 16px;display:flex;flex-direction:column;gap:6px}
+.rate b{font-family:var(--f-display);font-size:1.05rem}
+
+/* day list */
+.days{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.day{border-top:1px solid var(--line)}
+.day:first-child{border-top:0}
+.day>button{all:unset;box-sizing:border-box;display:grid;grid-template-columns:52px 1fr auto;gap:12px;align-items:center;width:100%;padding:12px 14px;cursor:pointer}
+.day>button:focus-visible{outline:2px solid var(--basil);outline-offset:-2px}
+.day .date{display:flex;flex-direction:column;align-items:center;line-height:1}
+.day .dow{font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.day .dnum{font-family:var(--f-display);font-size:1.45rem;font-weight:700;font-variant-numeric:tabular-nums;margin-top:3px}
+.day .what{min-width:0;display:flex;flex-direction:column;gap:4px}
+.day .t{font-weight:700;line-height:1.25}
+.day.leftovers .t,.day.flex .t{font-weight:400}
+.day .sub{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.day.past{opacity:.62}
+.day.today{background:var(--basil-soft);opacity:1}
+.day.today .dnum{color:var(--basil)}
+.thawline{font-size:.8rem;color:var(--ice);display:inline-flex;align-items:center;gap:4px}
+.thawline.done{color:var(--muted);text-decoration:line-through}
+.chev{color:var(--muted)}
+
+/* lists */
+.list{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+.list li{display:flex;align-items:center;gap:10px;padding:8px 8px 8px 14px;border-top:1px solid var(--line);min-height:52px}
+.list li:first-child{border-top:0}
+.list .txt{flex:1;min-width:0;overflow-wrap:anywhere}
+.list .tag{font-size:.72rem;color:var(--muted);font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.empty{padding:14px;color:var(--muted);font-size:.95rem;background:var(--surface);border:1px dashed var(--line);border-radius:var(--r)}
+.seg{display:inline-flex;background:var(--sunk);border-radius:9px;padding:2px;flex:none}
+.seg button{border:0;background:transparent;border-radius:7px;padding:6px 10px;font-size:.85rem;font-weight:700;color:var(--muted);min-height:34px}
+.seg button.on.have{background:var(--surface);color:var(--basil);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.seg button.on.low{background:var(--honey);color:var(--surface)}
+.count{font-family:var(--f-display);font-weight:700;color:var(--basil);font-variant-numeric:tabular-nums}
+.guide{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;color:var(--muted);font-size:.95rem}
+.guide p{margin:0}
+.notice{background:var(--honey-soft);border-radius:var(--r);padding:14px 16px;font-size:.95rem}
+
+/* rating rows */
+.rrow{display:grid;grid-template-columns:1fr auto;gap:4px 12px;align-items:center;padding:12px 14px;border-top:1px solid var(--line);width:100%;text-align:left;background:transparent;border-left:0;border-right:0;border-bottom:0}
+.rrow:first-child{border-top:0}
+.rrow .t{font-weight:700}
+.rrow .n{grid-column:1/-1;font-size:.88rem;color:var(--muted)}
+
+/* bottom nav */
+.nav{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+.nav .in{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr)}
+.nav button{border:0;background:transparent;height:var(--nav-h);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:.75rem;font-weight:700;color:var(--muted);position:relative}
+.nav button svg{width:22px;height:22px}
+.nav button[aria-current="page"]{color:var(--basil)}
+.nav .badge{position:absolute;top:8px;left:calc(50% + 6px);background:var(--honey);color:var(--surface);font-size:.65rem;min-width:18px;height:18px;border-radius:9px;display:grid;place-items:center;padding:0 5px;font-variant-numeric:tabular-nums}
+
+/* sheet */
+.scrim{position:fixed;inset:0;background:rgba(8,14,10,.45);z-index:30}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:31;max-height:88%;overflow-y:auto;background:var(--surface);border-radius:20px 20px 0 0;padding:8px 16px calc(24px + env(safe-area-inset-bottom,0px));max-width:560px;margin:0 auto;box-shadow:0 -8px 30px rgba(0,0,0,.18)}
+.grab{width:40px;height:4px;border-radius:2px;background:var(--line);margin:4px auto 12px}
+.sheet .head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.sheet .meal-title{font-family:var(--f-display);font-size:1.5rem;font-weight:700;line-height:1.1;margin-top:6px}
+.sheet p{margin:0}
+.swaplist{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.swaplist button{border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:8px 10px;text-align:left;font-size:.88rem;min-height:44px}
+.swaplist button b{display:block;font-size:.75rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.notes{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.notes li{display:flex;gap:8px;align-items:flex-start;background:var(--bg);border-radius:10px;padding:8px 6px 8px 12px}
+.notes .txt{flex:1;min-width:0;overflow-wrap:anywhere}
+.notes time{display:block;font-size:.75rem;color:var(--muted)}
+.recipe{display:flex;flex-direction:column;gap:10px;margin-top:24px}
+.rfacts{display:flex;flex-wrap:wrap;gap:8px}
+.fact{background:var(--sunk);border-radius:8px;padding:4px 10px;font-size:.85rem;font-weight:700;font-variant-numeric:tabular-nums}
+.ing,.steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.ing li button{all:unset;box-sizing:border-box;display:flex;gap:12px;align-items:flex-start;padding:9px 2px;width:100%;cursor:pointer;border-top:1px solid var(--line)}
+.ing li:first-child button{border-top:0}
+.box{flex:none;width:22px;height:22px;border-radius:6px;border:2px solid var(--line);margin-top:1px;display:grid;place-items:center;font-size:.8rem;font-weight:800}
+.ing .on .box{background:var(--basil);border-color:var(--basil);color:var(--on-basil)}
+.ing .on .lbl{color:var(--muted);text-decoration:line-through}
+.steps{gap:4px}
+.steps li button{all:unset;box-sizing:border-box;display:grid;grid-template-columns:30px 1fr;gap:10px;cursor:pointer;width:100%;padding:8px 2px;font-size:1.02rem;line-height:1.5}
+.steps .num{font-family:var(--f-display);font-weight:800;color:var(--basil);font-size:1.25rem;line-height:1.2;font-variant-numeric:tabular-nums}
+.steps .on{opacity:.4}
+.tip{font-size:.92rem;color:var(--muted);background:var(--bg);border-radius:10px;padding:10px 12px;margin:0}
+.ing li button:focus-visible,.steps li button:focus-visible{outline:2px solid var(--basil);outline-offset:2px}
+.status{background:var(--basil-soft);border-radius:var(--r);padding:14px 16px;display:flex;flex-direction:column;gap:6px}
+.status.attn{background:var(--honey-soft)}
+.status b{font-family:var(--f-display);font-size:1.08rem}
+.status .row{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.chip.replace{background:var(--honey-soft);color:var(--honey)}
+.cycle{font-size:.88rem;color:var(--muted);margin:0;font-variant-numeric:tabular-nums}
+.gro{display:flex;flex-direction:column;gap:6px}
+.gro ul{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+.gro li{padding:9px 14px;border-top:1px solid var(--line);overflow-wrap:anywhere}
+.gro li:first-child{border-top:0}
+.status a{color:inherit;font-weight:700}
+.copybox{width:100%;min-height:160px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);padding:10px 12px;font:inherit;font-size:.9rem}
+.push{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.push .lead{flex:1 1 100%;font-size:.92rem;color:var(--muted)}
+.day.gap .gaprow{display:grid;grid-template-columns:52px 1fr;gap:12px;align-items:center;padding:10px 14px;background:repeating-linear-gradient(135deg,transparent 0 8px,var(--sunk) 8px 9px)}
+.day.gap .t{color:var(--muted);font-style:italic;font-weight:400}
+.nav .fsbtn{display:none}
+.wide-only{display:none}
+.today-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:0}
+.today-grid>.tcol{min-width:0;display:flex;flex-direction:column}
+.days.upnext li:nth-child(n+4){display:none}
+@media (min-width:960px){
+  body{font-size:17px}
+  .wrap{max-width:1280px;padding-inline:32px;padding-block:24px 40px}
+  .checks{height:10px;background-size:10px 10px}
+  h1{font-size:2.75rem}
+  .topline{padding-right:min(520px,46%);margin-bottom:24px}
+  .planrange{display:none}
+  .today-grid{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr) minmax(0,.9fr);gap:28px;align-items:start}
+  .today-grid>.tcol>.section:first-child,.today-grid>.tcol>.stack:first-child{margin-top:0}
+  .wide-only{display:flex}
+  .narrow-only{display:none}
+  .days.upnext li:nth-child(n+4){display:block}
+  .tonight{padding:24px}
+  .tonight .meal-title{font-size:2.4rem}
+  .view:not(#v-today){max-width:760px}
+  .nav{position:absolute;top:calc(env(safe-area-inset-top,0px) + 44px);right:max(32px,calc((100vw - 1280px) / 2 + 32px));left:auto;bottom:auto;background:transparent;border:0;padding:0}
+  .nav .in{display:flex;gap:8px;max-width:none}
+  .nav button{flex-direction:row;height:44px;padding:0 16px;border-radius:10px;font-size:1rem;color:var(--ink);box-shadow:inset 0 0 0 1px var(--line);background:var(--surface);gap:8px}
+  .nav button svg{width:18px;height:18px}
+  .nav button[aria-current="page"]{background:var(--basil);color:var(--on-basil);box-shadow:none}
+  .nav .badge{top:-7px;left:auto;right:-7px}
+  .nav .fsbtn{display:flex;color:var(--muted)}
+  .toast{bottom:calc(24px + env(safe-area-inset-bottom,0px))}
+}
+.toast{display:flex;align-items:center;gap:14px}
+.toast[hidden]{display:none}
+.toast button{border:0;background:transparent;color:var(--bg);font-weight:800;text-decoration:underline;text-underline-offset:3px;padding:4px 2px;min-height:32px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--nav-h) + 16px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;z-index:40;font-size:.92rem;max-width:calc(100% - 32px);text-align:center}
+@media (prefers-reduced-motion:no-preference){
+  .sheet{animation:up .22s ease-out}
+  @keyframes up{from{transform:translateY(30px);opacity:.4}to{transform:none;opacity:1}}
+}
+</style>
+
+<div class="wrap">
+  <div class="checks" aria-hidden="true"></div>
+  <div class="topline">
+    <div>
+      <div class="eyebrow" id="todayLabel">Today</div>
+      <h1 id="viewTitle">Tonight</h1>
+    </div>
+    <div class="planrange" id="planRange"></div>
+  </div>
+
+  <div id="dbNotice" class="notice" hidden>The shared plan can't load in this view. Open this page in Claude while signed in to see and edit it.</div>
+
+  <!-- TODAY -->
+  <section class="view" id="v-today">
+    <div class="today-grid">
+      <div class="tcol">
+        <div class="stack" id="todayDyn">
+          <div class="empty">Loading tonight's menu…</div>
+        </div>
+        <div class="section narrow-only">
+          <div class="section-head"><h2>Add to the next order</h2></div>
+          <form class="addform js-add-grocery" autocomplete="off">
+            <input id="addGroceryToday" type="text" placeholder="e.g. eggs, coffee, paper towels" aria-label="Item to add to the next grocery order">
+            <button class="btn" type="submit">Add</button>
+          </form>
+        </div>
+      </div>
+      <div class="tcol">
+        <div class="section" id="nextUpWrap">
+          <div class="section-head"><h2>Coming up</h2></div>
+          <ul class="days upnext" id="nextUp"></ul>
+        </div>
+      </div>
+      <div class="tcol wide-only">
+        <div class="section">
+          <div class="section-head"><h2>Next order</h2><span class="count" id="nextCountWide"></span></div>
+          <form class="addform js-add-grocery" autocomplete="off">
+            <input id="addGroceryWide" type="text" placeholder="Add an item" aria-label="Item to add to the next grocery order">
+            <button class="btn" type="submit">Add</button>
+          </form>
+          <div id="nextListWide"></div>
+        </div>
+        <div class="section">
+          <div class="section-head"><h2>In the freezer</h2></div>
+          <div id="freezerWide"></div>
+        </div>
+        <p class="cycle" id="cycleWide"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- PLAN -->
+  <section class="view" id="v-plan" hidden>
+    <div id="planDyn" class="stack"></div>
+  </section>
+
+  <!-- SHOPPING -->
+  <section class="view" id="v-shop" hidden>
+    <div id="shopStatus" class="stack" style="margin-bottom:20px" hidden></div>
+    <div class="section" style="margin-top:0">
+      <div class="section-head"><h2>Next order</h2><span class="count" id="nextCount"></span></div>
+      <p class="muted" style="margin:0;font-size:.92rem">Anything here goes into the next Walmart order along with the new plan's groceries.</p>
+      <form class="addform js-add-grocery" autocomplete="off">
+        <input id="addGroceryShop" type="text" placeholder="Add an item" aria-label="Item to add to the next grocery order">
+        <button class="btn" type="submit">Add</button>
+      </form>
+      <div id="nextList"></div>
+    </div>
+    <div class="section" id="planGroWrap" hidden>
+      <div class="section-head"><h2>Next plan's groceries</h2><span class="count" id="planGroRange"></span></div>
+      <p class="muted" style="margin:0;font-size:.92rem">Thursday evening Claude combines these with the next-order list above into one list for Muse.</p>
+      <div><button type="button" class="btn small ghost" data-act="copy">Copy full order list</button></div>
+      <div id="planGroDyn" class="stack"></div>
+    </div>
+    <div class="section">
+      <div class="section-head"><h2>Staples</h2></div>
+      <p class="muted" style="margin:0;font-size:.92rem">Mark something Low and it joins the next order. Pantry items haven't been confirmed yet.</p>
+      <div id="staplesDyn" class="stack"></div>
+    </div>
+    <div class="section">
+      <div class="section-head"><h2>In the freezer</h2></div>
+      <div id="freezerDyn"></div>
+      <form class="addform" id="freezerForm" autocomplete="off">
+        <input id="addFreezer" type="text" placeholder="e.g. chicken thighs, about 2 lb" aria-label="Item added to the freezer">
+        <button class="btn ghost" type="submit">Add</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- FEEDBACK -->
+  <section class="view" id="v-feedback" hidden>
+    <div class="section" style="margin-top:0">
+      <div class="section-head"><h2>Requests for the next plan</h2></div>
+      <p class="muted" style="margin:0;font-size:.92rem">Meals to try, things to skip, busy nights coming up. Claude reads these before writing the next two weeks.</p>
+      <form class="addform" id="ideaForm" autocomplete="off">
+        <input id="addIdea" type="text" placeholder="e.g. more fish, nothing spicy on Tuesdays" aria-label="Request for the next meal plan">
+        <button class="btn" type="submit">Add</button>
+      </form>
+      <div id="ideasDyn"></div>
+    </div>
+    <div class="section">
+      <div class="section-head"><h2>Cook-night ratings</h2></div>
+      <div id="ratingsDyn"></div>
+    </div>
+    <div class="section">
+      <div class="section-head"><h2>Plan guidelines</h2></div>
+      <div class="guide" id="guideDyn"><p>Loading…</p></div>
+    </div>
+  </section>
+</div>
+
+<nav class="nav" aria-label="Sections">
+  <div class="in">
+    <button type="button" data-tab="today" aria-current="page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="13" r="7"/><circle cx="12" cy="13" r="3.5"/><path d="M4 4v5M20 4v5"/></svg>Tonight</button>
+    <button type="button" data-tab="plan">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>Plan</button>
+    <button type="button" data-tab="shop">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9h16l-1.6 9.2a2 2 0 0 1-2 1.8H7.6a2 2 0 0 1-2-1.8z"/><path d="M8.5 9 11 4M15.5 9 13 4"/></svg>Shopping<span class="badge" id="navBadge" hidden></span></button>
+    <button type="button" data-tab="feedback">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="m12 3.5 2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z"/></svg>Feedback</button>
+    <button type="button" class="fsbtn" id="fsBtn" data-act="fullscreen" aria-pressed="false">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+      <span id="fsLabel">Full screen</span>
+    </button>
+  </div>
+</nav>
+
+<div class="scrim" id="scrim" hidden></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" hidden>
+  <div class="grab"></div>
+  <div id="sheetDyn"></div>
+  <div class="section">
+    <div class="section-head"><h2>Notes</h2></div>
+    <ul class="notes" id="sheetNotes"></ul>
+    <form class="addform" id="noteForm" autocomplete="off">
+      <input id="noteInput" type="text" placeholder="e.g. try with angel hair next time" aria-label="Note about this meal">
+      <button class="btn" type="submit">Save</button>
+    </form>
+  </div>
+  <div class="section" id="replaceWrap" hidden>
+    <div class="section-head"><h2>Not feeling this one?</h2></div>
+    <p class="muted" style="font-size:.92rem;margin:0">Mark it and Claude swaps in a different meal before building the cart. A note saying what you'd rather have helps.</p>
+    <div id="replaceBtn"></div>
+  </div>
+  <div class="section" id="pushWrap">
+    <div class="section-head"><h2>Push back</h2></div>
+    <div class="push" id="pushBtns"></div>
+  </div>
+  <div class="section" id="swapWrap">
+    <div class="section-head"><h2>Trade places with another day</h2></div>
+    <p class="muted" style="font-size:.92rem;margin:0">Only these two meals change days. The thaw reminder moves with each meal.</p>
+    <div class="swaplist" id="swapList"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" hidden></div>
+<div class="scrim" id="copyScrim" hidden></div>
+<div class="sheet" id="copySheet" role="dialog" aria-modal="true" aria-labelledby="copyTitle" hidden>
+  <div class="grab"></div>
+  <div class="head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px"><h2 id="copyTitle">Copy the order list</h2><button type="button" class="iconbtn" data-act="closeCopy" aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+  <p class="muted" style="font-size:.92rem;margin:8px 0">This device didn't allow automatic copying. The list is selected below; use your device's Copy, then paste it into Muse.</p>
+  <textarea id="copyBox" class="copybox" readonly aria-label="Order list"></textarea>
+</div>
+
+<script>
+(function(){
+  const S = {meals:[],draft:[],history:[],notes:[],grocery:[],staples:[],freezer:[],ideas:[],plan:null,dplan:null,loaded:{}};
+  const checked = new Set(); let wakeLock = null;
+  let db = null, dbState = "pending", readOnly = false, tab = "today", openId = null;
+  const $ = id => document.getElementById(id);
+  const pad = n => String(n).padStart(2,"0");
+  const keyOf = d => d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+  const dateOf = k => { const [y,m,d] = k.split("-").map(Number); return new Date(y,m-1,d); };
+  const addDays = (k,n) => { const d = dateOf(k); d.setDate(d.getDate()+n); return keyOf(d); };
+  const fmt = (k,o) => dateOf(k).toLocaleDateString("en-US",o);
+  const today = () => keyOf(new Date());
+  const esc = s => String(s ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const STAR = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m12 3.2 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17.2l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>';
+  const SNOW = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 2v20M3.3 7l17.4 10M3.3 17 20.7 7M9 4l3 2 3-2M9 20l3-2 3 2"/></svg>';
+  const X = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+  const KIND = {cook:"Cook night",leftovers:"Leftovers",flex:"Flexible"};
+
+  const byDate = (a,b)=>a.date<b.date?-1:a.date>b.date?1:0;
+  const meals = () => S.meals.concat(S.draft).sort(byDate);
+  const mealOn = k => meals().find(m=>m.date===k);
+  const findMeal = id => S.meals.find(x=>x.id===id) || S.draft.find(x=>x.id===id) || S.history.find(x=>x.id===id);
+  const mref = m => db.doc((m._col||"meals")+"/"+m.id);
+  const status = () => (S.plan && S.plan.status) || "active";
+  const proposed = m => m && m._col==="draft" && status()==="drafted";
+  const weekOf = (k,start) => Math.floor((dateOf(k)-dateOf(start))/864e5/7);
+  function cookNo(m){
+    if(m.kind!=="cook" || m._col==="history") return "";
+    const src = (m._col==="draft"?S.draft:S.meals).slice().sort(byDate); if(!src.length) return "";
+    const st = src[0].date, w = weekOf(m.date,st);
+    const list = src.filter(x=>x.kind==="cook" && weekOf(x.date,st)===w);
+    return (list.findIndex(x=>x.id===m.id)+1)+" of "+list.length;
+  }
+  function cycleDates(){
+    const cur = S.meals.map(m=>m.date).sort(); if(!cur.length) return null;
+    const ns = addDays(cur[cur.length-1],1), pickup = addDays(ns, -dateOf(ns).getDay());
+    return {draft:addDays(pickup,-5), cart:addDays(pickup,-3), pickup};
+  }
+  const short = k => fmt(k,{weekday:"short",month:"short",day:"numeric"});
+  function statusHtml(where){
+    const st = status(), p = S.plan||{}, d = S.dplan||{};
+    const range = d.start && d.end ? fmt(d.start,{month:"short",day:"numeric"})+" – "+fmt(d.end,{month:"short",day:"numeric"}) : "";
+    const pickup = p.pickup || d.pickup || "";
+    const note = p.statusNote ? '<span class="muted" style="font-size:.9rem">'+esc(p.statusNote)+'</span>' : "";
+    if(st==="drafted"){
+      const n = S.draft.filter(m=>m.swapOut).length;
+      return '<div class="status attn"><b>Next plan is ready to review</b><span>'+(range?range+". ":"")+'Mark anything you want replaced, then approve it by Thursday afternoon.'+(n?' '+n+' meal'+(n>1?'s':'')+' marked to replace.':'')+'</span>'+note+
+        '<div class="row">'+(where!=="plan"?'<button type="button" class="btn small ghost" data-tab="plan">Review the plan</button>':'')+'<button type="button" class="btn small" data-act="approve">Approve plan</button></div></div>';
+    }
+    if(st==="approved") return '<div class="status"><b>Plan approved</b><span>Claude finalizes the grocery list Thursday evening'+(pickup?' for pickup '+esc(pickup):'')+'.</span>'+note+'</div>';
+    if(st==="list_ready") return '<div class="status attn"><b>Your Walmart list is ready</b><span>Copy it and send it to Muse'+(d.orderDocUrl?', or point Muse to <a href="'+esc(d.orderDocUrl)+'" target="_blank" rel="noopener">this week\'s list in Google Drive</a>':'')+'. Once Muse has placed the order, tap I placed the order.</span>'+note+
+      '<div class="row"><button type="button" class="btn small" data-act="copy">Copy list for Muse</button><button type="button" class="btn small ghost" data-act="ordered">I placed the order</button></div></div>';
+    if(st==="cart_built") return '<div class="status attn"><b>Your Walmart cart is ready</b><span>Open the Walmart app, check the cart'+(pickup?' and the '+esc(pickup)+' pickup time':'')+', then place the order.</span>'+note+'<div class="row"><button type="button" class="btn small" data-act="ordered">I placed the order</button></div></div>';
+    if(st==="ordered") return '<div class="status"><b>Order placed</b><span>'+(pickup?'Pickup '+esc(pickup)+'. ':'')+(d.prep?esc(d.prep):'')+'</span>'+note+'</div>';
+    return note ? '<div class="status attn"><b>Heads up</b>'+note+'</div>' : "";
+  }
+  const notesFor = id => S.notes.filter(n=>n.meal===id).sort((a,b)=>(a.at||"")<(b.at||"")?-1:1);
+  function starsHtml(m, mini){
+    const r = m.rating||0; let h = '<span class="stars'+(mini?' mini':'')+'"'+(mini?' aria-label="'+(r?r+' of 5 stars':'Not rated')+'"':' role="group" aria-label="Rate this meal"')+'>';
+    for(let i=1;i<=5;i++){
+      h += mini ? '<span class="star'+(i<=r?' on':'')+'">'+STAR+'</span>'
+                : '<button type="button" class="star'+(i<=r?' on':'')+'" data-act="rate" data-id="'+esc(m.id)+'" data-v="'+i+'" aria-label="'+i+' star'+(i>1?'s':'')+'" aria-pressed="'+(i===r)+'">'+STAR+'</button>';
+    }
+    return h+'</span>';
+  }
+  function chip(kind){ return '<span class="chip '+esc(kind)+'">'+esc(KIND[kind]||kind)+'</span>'; }
+
+  function dayRow(m, t){
+    const cls = ["day", m.kind]; if(m.date<t) cls.push("past"); if(m.date===t) cls.push("today");
+    const next = mealOn(addDays(m.date,1));
+    let sub = chip(m.kind);
+    if(m.kind==="cook") sub += '<span class="muted" style="font-size:.8rem">'+cookNo(m)+'</span>';
+    if(m.swapOut) sub += '<span class="chip replace">Replace</span>';
+    if(m.rating) sub += starsHtml(m,true);
+    const nn = notesFor(m.id).length; if(nn) sub += '<span class="muted" style="font-size:.8rem">'+nn+' note'+(nn>1?'s':'')+'</span>';
+    if(next && next.thaw) sub += '<span class="thawline'+(next.thawDone?' done':'')+'">'+SNOW.replace('class="ico"','width="14" height="14"')+'Thaw tonight: '+esc(next.thaw)+'</span>';
+    return '<li class="'+cls.join(" ")+'"><button type="button" data-act="open" data-id="'+esc(m.id)+'">'+
+      '<span class="date"><span class="dow">'+fmt(m.date,{weekday:"short"})+'</span><span class="dnum">'+dateOf(m.date).getDate()+'</span></span>'+
+      '<span class="what"><span class="t">'+esc(m.title)+'</span><span class="sub">'+sub+'</span></span>'+
+      '<span class="chev" aria-hidden="true">›</span></button></li>';
+  }
+
+  function pushHtml(m, compact){
+    const after = meals().filter(x=>x.date>m.date).length;
+    const lead = compact ? "Not cooking tonight? Slide the plan later." : "Moves this meal"+(after?" and the "+after+" after it":"")+" later. Thaw reminders move with them.";
+    return '<span class="lead">'+lead+'</span>'+[1,2].map(n=>'<button type="button" class="btn small'+(n>1?' ghost':'')+'" data-act="push" data-id="'+esc(m.id)+'" data-n="'+n+'">'+(n===1?"Push back 1 day":"2 days")+'</button>').join("");
+  }
+  async function pushBack(id, n){
+    const m = findMeal(id); if(!m) return;
+    const moves = meals().filter(x=>x.date>=m.date).map(x=>({m:x, from:x.date, to:addDays(x.date,n)}));
+    const thawing = meals().filter(x=>x.date>=m.date && x.thaw && x.thawDone && x.date<=addDays(today(),1))[0];
+    const apply = async (dir) => { for(const mv of (dir>0?moves.slice().reverse():moves)){ await mref(mv.m).update({date: dir>0?mv.to:mv.from}); } };
+    const ok = await save(()=>apply(1));
+    if(!ok) return;
+    closeSheet();
+    let msg = "Plan pushed back "+n+" day"+(n>1?"s":"")+". "+m.title+" is now "+fmt(addDays(m.date,n),{weekday:"long"})+".";
+    if(thawing) msg += " The "+thawing.thaw.replace(/^the /,"")+" is already thawing; it keeps 1 to 2 days in the fridge.";
+    toast(msg, async ()=>{ if(await save(()=>apply(-1))) toast("Undone. The plan is back where it was."); });
+  }
+
+  function renderHeader(){
+    const t = today();
+    $("todayLabel").textContent = fmt(t,{weekday:"long",month:"short",day:"numeric"});
+    $("viewTitle").textContent = {today:"Tonight",plan:"Two-week plan",shop:"Shopping",feedback:"Feedback"}[tab];
+    const ms = S.meals.slice().sort(byDate);
+    if(ms.length){
+      const a = ms[0].date, b = ms[ms.length-1].date;
+      $("planRange").innerHTML = "Plan<br>"+fmt(a,{month:"short",day:"numeric"})+" – "+fmt(b,{month:"short",day:"numeric"});
+    } else $("planRange").textContent = "";
+  }
+
+  function renderToday(){
+    const t = today(), ms = meals();
+    if(dbState==="none"){ $("todayDyn").innerHTML = ""; $("nextUpWrap").hidden = true; return; }
+    if(dbState==="pending"){ $("nextUpWrap").hidden = true; return; }
+    const cyw = cycleDates();
+    $("cycleWide").textContent = cyw && status()==="active" && !S.draft.length ? "Next plan: draft "+short(cyw.draft)+" · list "+short(cyw.cart)+" · pickup "+short(cyw.pickup) : "";
+    if(!S.loaded.meals){ return; }
+    let h = statusHtml("today");
+    const tm = mealOn(t), tomorrow = mealOn(addDays(t,1));
+    if(!ms.length){
+      h += '<div class="empty">No meal plan yet. Claude adds each two-week plan here, and it shows up for both of you.</div>';
+    } else if(!tm && t>=ms[0].date && t<=ms[ms.length-1].date){
+      const nx = ms.find(m=>m.date>t);
+      h += '<div class="tonight"><span class="eyebrow">Night off</span><span class="meal-title">Nothing planned tonight</span><p>'+(nx?"Next up: "+esc(nx.title)+" on "+fmt(nx.date,{weekday:"long"})+".":"")+'</p></div>';
+    } else if(!tm){
+      const last = ms[ms.length-1].date;
+      h += '<div class="tonight"><span class="eyebrow">'+(t>last?"Plan finished":"Plan starts "+fmt(ms[0].date,{weekday:"long",month:"short",day:"numeric"}))+'</span><span class="meal-title">'+(t>last?"Next plan coming soon":"Nothing planned yet")+'</span><p>'+(t>last?"Leave requests on the Feedback tab and add anything you need to the next order.":"")+'</p></div>';
+    } else {
+      h += '<button type="button" class="tonight" data-act="open" data-id="'+esc(tm.id)+'">'+
+        '<span class="meta">'+chip(tm.kind)+(tm.kind==="cook"?'<span class="muted" style="font-size:.85rem">Cook night '+cookNo(tm)+' this week</span>':'')+'</span>'+
+        '<span class="meal-title">'+esc(tm.title)+'</span>'+(tm.details?'<p>'+esc(tm.details)+'</p>':'')+
+        '<span class="muted" style="font-size:.85rem">'+(tm.recipe?'Tap for the recipe, notes, and rating':'Tap for notes, rating, or to move it')+'</span></button>';
+    }
+    if(tm && !proposed(tm)) h += '<div class="push">'+pushHtml(tm,true)+'</div>';
+    if(tm && tm.thaw && !tm.thawDone){
+      h += '<div class="thaw late">'+SNOW+'<div class="body"><span><strong>Did it thaw?</strong> Tonight needs '+esc(tm.thaw)+' from the freezer. If it\'s still frozen, a sealed bag in cold water thaws it in about an hour.</span><div><button class="btn small ghost" type="button" data-act="thaw" data-id="'+esc(tm.id)+'">It\'s thawed</button></div></div></div>';
+    }
+    if(tomorrow && tomorrow.thaw){
+      h += tomorrow.thawDone
+        ? '<div class="thaw">'+SNOW+'<div class="body"><span><strong>Thawing.</strong> '+esc(tomorrow.thaw)+' is in the fridge for tomorrow\'s '+esc(tomorrow.title)+'.</span></div></div>'
+        : '<div class="thaw">'+SNOW+'<div class="body"><span><strong>Before bed:</strong> move '+esc(tomorrow.thaw)+' from the freezer to the fridge for tomorrow\'s '+esc(tomorrow.title)+'.</span><div><button class="btn small ice" type="button" data-act="thaw" data-id="'+esc(tomorrow.id)+'">Done, it\'s in the fridge</button></div></div></div>';
+    }
+    const unrated = ms.filter(m=>m.kind==="cook" && m.date<t && !m.rating).pop();
+    if(unrated){
+      h += '<div class="rate"><b>How was '+fmt(unrated.date,{weekday:"long"})+'\'s '+esc(unrated.title.charAt(0).toLowerCase()+unrated.title.slice(1))+'?</b>'+starsHtml(unrated,false)+
+        '<button type="button" class="btn small ghost" style="align-self:flex-start" data-act="open" data-id="'+esc(unrated.id)+'">Add a note</button></div>';
+    }
+    $("todayDyn").innerHTML = h;
+    const up = ms.filter(m=>m.date>t).slice(0,7);
+    $("nextUpWrap").hidden = !up.length;
+    $("nextUp").innerHTML = up.map(m=>dayRow(m,t)).join("");
+  }
+
+  function blockHtml(list, label, t, first){
+    const weeks = {}, st = list[0].date;
+    for(let k = st; k <= list[list.length-1].date; k = addDays(k,1)){
+      const w = weekOf(k,st), on = list.filter(m=>m.date===k);
+      weeks[w] = weeks[w] || {first:k,last:k,rows:[]}; weeks[w].last = k;
+      if(on.length) on.forEach(m=>weeks[w].rows.push(dayRow(m,t)));
+      else weeks[w].rows.push('<li class="day gap'+(k<t?' past':'')+(k===t?' today':'')+'"><div class="gaprow"><span class="date"><span class="dow">'+fmt(k,{weekday:"short"})+'</span><span class="dnum">'+dateOf(k).getDate()+'</span></span><span class="t">Night off</span></div></li>');
+    }
+    let h = "";
+    Object.keys(weeks).sort((a,b)=>a-b).forEach(w=>{
+      const wk = weeks[w];
+      h += '<div class="section"'+(first&&!h?' style="margin-top:0"':'')+'><div class="section-head"><h2>'+(label?label+' · ':'')+'Week '+(+w+1)+'</h2><span class="muted" style="font-size:.85rem">'+fmt(wk.first,{month:"short",day:"numeric"})+' – '+fmt(wk.last,{month:"short",day:"numeric"})+'</span></div><ul class="days">'+wk.rows.join("")+'</ul></div>';
+    });
+    return h;
+  }
+
+  function renderPlan(){
+    const t = today(), cur = S.meals.slice().sort(byDate), nx = S.draft.slice().sort(byDate);
+    if(dbState==="none"){ $("planDyn").innerHTML = ""; return; }
+    if(!S.loaded.meals){ $("planDyn").innerHTML = '<div class="empty">Loading the plan…</div>'; return; }
+    let h = statusHtml("plan");
+    if(!cur.length && !nx.length){ $("planDyn").innerHTML = h+'<div class="empty">No meal plan yet. Claude adds each two-week plan here.</div>'; return; }
+    if(cur.length) h += blockHtml(cur, nx.length?"This plan":"", t, !h);
+    const cy = cycleDates();
+    if(nx.length){
+      const d = S.dplan || {};
+      h += '<div class="section"><div class="section-head"><h2>Next plan</h2><span class="muted" style="font-size:.85rem">'+(status()==="drafted"?"Proposed":"Approved")+'</span></div>'+
+        (d.summary?'<p class="muted" style="margin:0">'+esc(d.summary)+'</p>':'')+
+        (d.prep?'<p class="cycle">'+esc(d.prep)+'</p>':'')+
+        (status()==="drafted"?'<p class="cycle">Tap a meal to see its recipe or mark it to replace.</p>':'')+'</div>';
+      h += blockHtml(nx, "Next plan", t, false);
+    } else if(cy && status()==="active"){
+      h += '<div class="section"><div class="section-head"><h2>Next plan</h2></div><p class="cycle">Claude drafts it '+short(cy.draft)+' and finalizes the grocery list '+short(cy.cart)+' for pickup '+short(cy.pickup)+' afternoon.</p></div>';
+    }
+    $("planDyn").innerHTML = h;
+  }
+
+  function nextOrder(){
+    const adds = S.grocery.slice().sort((a,b)=>(a.at||"")<(b.at||"")?-1:1).map(g=>({kind:"add",id:g.id,text:g.text}));
+    const low = S.staples.filter(s=>s.status==="low").map(s=>({kind:"low",id:s.id,text:s.name}));
+    return adds.concat(low);
+  }
+
+  function renderShop(){
+    if(dbState==="none"){ ["nextList","staplesDyn","freezerDyn"].forEach(i=>$(i).innerHTML=""); return; }
+    if(dbState==="pending"){ $("nextList").innerHTML = '<div class="empty">Loading the list…</div>'; return; }
+    const sh = statusHtml("shop"); $("shopStatus").innerHTML = sh; $("shopStatus").hidden = !sh;
+    const d = S.dplan;
+    $("planGroWrap").hidden = !(d && d.groceries && d.groceries.length);
+    if(d && d.groceries){
+      $("planGroRange").textContent = d.start && d.end ? fmt(d.start,{month:"short",day:"numeric"})+" – "+fmt(d.end,{month:"short",day:"numeric"}) : "";
+      $("planGroDyn").innerHTML = d.groceries.map(g=>'<div class="gro"><span class="eyebrow">'+esc(g.section||"Groceries")+'</span><ul>'+(g.items||[]).map(i=>'<li>'+esc(i)+'</li>').join("")+'</ul></div>').join("");
+    }
+    const items = nextOrder();
+    $("nextCount").textContent = items.length ? items.length+" item"+(items.length>1?"s":"") : "";
+    const badge = $("navBadge"); badge.hidden = !items.length; badge.textContent = items.length;
+    $("nextCountWide").textContent = items.length ? items.length+" item"+(items.length>1?"s":"") : "";
+    $("nextList").innerHTML = items.length
+      ? '<ul class="list">'+items.map(i=>'<li><span class="txt">'+esc(i.text)+(i.kind==="low"?' <span class="tag">· staple</span>':'')+'</span>'+
+          (i.kind==="add"
+            ? '<button type="button" class="iconbtn" data-act="delGrocery" data-id="'+esc(i.id)+'" aria-label="Remove '+esc(i.text)+'">'+X+'</button>'
+            : '<button type="button" class="btn small ghost" data-act="staple" data-id="'+esc(i.id)+'" data-v="have">Have it</button>')+'</li>').join("")+'</ul>'
+      : '<div class="empty">Nothing added yet. Add items above or mark a staple Low.</div>';
+    const groups = {};
+    S.staples.slice().sort((a,b)=>(a.order||0)-(b.order||0)).forEach(s=>{ (groups[s.group||"Staples"] = groups[s.group||"Staples"]||[]).push(s); });
+    $("staplesDyn").innerHTML = Object.keys(groups).length ? Object.keys(groups).map(g=>
+      '<div class="stack" style="gap:6px"><span class="eyebrow">'+esc(g)+'</span><ul class="list">'+groups[g].map(s=>
+        '<li><span class="txt">'+esc(s.name)+(s.status==="unknown"?' <span class="tag">· not checked</span>':'')+'</span><span class="seg" role="group" aria-label="'+esc(s.name)+' status">'+
+        '<button type="button" class="have'+(s.status==="have"?" on":"")+'" data-act="staple" data-id="'+esc(s.id)+'" data-v="have" aria-pressed="'+(s.status==="have")+'">Have</button>'+
+        '<button type="button" class="low'+(s.status==="low"?" on":"")+'" data-act="staple" data-id="'+esc(s.id)+'" data-v="low" aria-pressed="'+(s.status==="low")+'">Low</button></span></li>').join("")+'</ul></div>').join("")
+      : '<div class="empty">No staples listed yet.</div>';
+    $("nextListWide").innerHTML = $("nextList").innerHTML;
+    const fz = S.freezer.slice().sort((a,b)=>(a.at||"")<(b.at||"")?-1:1);
+    $("freezerDyn").innerHTML = fz.length
+      ? '<ul class="list">'+fz.map(f=>'<li><span class="txt">'+esc(f.name)+(f.forMeal?' <span class="tag">· '+esc(f.forMeal)+'</span>':'')+'</span><button type="button" class="btn small ghost" data-act="delFreezer" data-id="'+esc(f.id)+'">Used</button></li>').join("")+'</ul>'
+      : '<div class="empty">Freezer list is empty.</div>';
+    $("freezerWide").innerHTML = $("freezerDyn").innerHTML;
+  }
+
+  function renderFeedback(){
+    if(dbState==="none"){ ["ideasDyn","ratingsDyn"].forEach(i=>$(i).innerHTML=""); $("guideDyn").innerHTML=""; return; }
+    if(dbState==="pending") return;
+    const ideas = S.ideas.slice().sort((a,b)=>(a.at||"")<(b.at||"")?1:-1);
+    $("ideasDyn").innerHTML = ideas.length
+      ? '<ul class="list">'+ideas.map(i=>'<li><span class="txt">'+esc(i.text)+'</span><button type="button" class="iconbtn" data-act="delIdea" data-id="'+esc(i.id)+'" aria-label="Remove request">'+X+'</button></li>').join("")+'</ul>'
+      : '<div class="empty">No requests yet.</div>';
+    const cooks = S.meals.concat(S.draft, S.history).filter(m=>m.kind==="cook" && m.date<=today()).sort(byDate).reverse();
+    $("ratingsDyn").innerHTML = cooks.length
+      ? '<div class="list" style="overflow:hidden">'+cooks.map(m=>{ const ns = notesFor(m.id);
+          return '<button type="button" class="rrow" data-act="open" data-id="'+esc(m.id)+'"><span class="t">'+esc(m.title)+'</span>'+(m.rating?starsHtml(m,true):'<span class="muted" style="font-size:.85rem">Rate it</span>')+
+          '<span class="n">'+fmt(m.date,{weekday:"short",month:"short",day:"numeric"})+(ns.length?' · “'+esc(ns[ns.length-1].text)+'”':'')+'</span></button>'; }).join("")+'</div>'
+      : '<div class="empty">Ratings show up here after each cook night.</div>';
+    $("guideDyn").innerHTML = S.plan && S.plan.guidelines ? '<p>'+esc(S.plan.guidelines)+'</p>' : '<p>No guidelines saved yet.</p>';
+  }
+
+  function orderText(){
+    const d = S.dplan || {};
+    if(d.orderText) return d.orderText;
+    const pickup = (S.plan && S.plan.pickup) || d.pickup || "Sunday afternoon";
+    const lines = ["Please build a Walmart pickup order for "+pickup+" with these items:",""];
+    (d.groceries||[]).forEach(g=>{ lines.push(g.section||"Groceries"); (g.items||[]).forEach(i=>lines.push("- "+i)); lines.push(""); });
+    const extra = nextOrder();
+    if(extra.length){ lines.push("Also add"); extra.forEach(i=>lines.push("- "+i.text)); lines.push(""); }
+    return lines.join("\n").trim();
+  }
+  function copyOrder(){
+    const text = orderText();
+    if(!text || text.split("\n").length<3){ toast("There's no order list yet. It appears once the next plan is drafted."); return; }
+    const fallback = ()=>{ $("copyBox").value = text; $("copyScrim").hidden = false; $("copySheet").hidden = false; setTimeout(()=>{ $("copyBox").focus(); $("copyBox").select(); },50); };
+    try{
+      navigator.clipboard.writeText(text).then(()=>toast("List copied. Paste it into Muse."), fallback);
+    }catch(e){ fallback(); }
+  }
+
+  function recipeHtml(m){
+    const r = m.recipe; if(!r) return "";
+    const fx = [r.serves?"Serves "+r.serves:"", r.time||"", r.oven?"Oven "+r.oven:""].filter(Boolean);
+    let h = '<div class="recipe"><div class="section-head"><h2>Recipe</h2><button type="button" class="btn small ghost" data-act="awake" aria-pressed="'+(!!wakeLock)+'">'+(wakeLock?"Screen stays on":"Keep screen on")+'</button></div>';
+    if(fx.length) h += '<div class="rfacts">'+fx.map(f=>'<span class="fact">'+esc(f)+'</span>').join("")+'</div>';
+    h += '<span class="eyebrow">Ingredients · tap as you go</span><ul class="ing">'+(r.ingredients||[]).map((x,i)=>{ const k = m.id+":i"+i, on = checked.has(k);
+      return '<li><button type="button" data-act="tick" data-k="'+esc(k)+'" aria-pressed="'+on+'" class="'+(on?"on":"")+'"><span class="box" aria-hidden="true">'+(on?"✓":"")+'</span><span class="lbl">'+esc(x)+'</span></button></li>'; }).join("")+'</ul>';
+    h += '<span class="eyebrow" style="margin-top:8px">Steps</span><ol class="steps">'+(r.steps||[]).map((x,i)=>{ const k = m.id+":s"+i, on = checked.has(k);
+      return '<li><button type="button" data-act="tick" data-k="'+esc(k)+'" aria-pressed="'+on+'" class="'+(on?"on":"")+'"><span class="num">'+(i+1)+'</span><span>'+esc(x)+'</span></button></li>'; }).join("")+'</ol>';
+    if(r.tip) h += '<p class="tip">'+esc(r.tip)+'</p>';
+    return h+'</div>';
+  }
+  let fsLock = null;
+  const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
+  async function toggleFullscreen(){
+    try{
+      if(fsEl()){
+        await (document.exitFullscreen ? document.exitFullscreen() : document.webkitExitFullscreen());
+        return;
+      }
+      const el = document.documentElement;
+      await (el.requestFullscreen ? el.requestFullscreen() : el.webkitRequestFullscreen());
+    }catch(e){
+      toast("This browser won't go full screen from here. A kiosk app like Fully Kiosk can do it instead.");
+    }
+  }
+  async function onFsChange(){
+    const on = !!fsEl();
+    $("fsLabel").textContent = on ? "Exit full screen" : "Full screen";
+    $("fsBtn").setAttribute("aria-pressed", String(on));
+    if(on){
+      try{ fsLock = await navigator.wakeLock.request("screen"); }catch(e){ fsLock = null; }
+    } else if(fsLock){
+      try{ await fsLock.release(); }catch(e){} fsLock = null;
+    }
+  }
+  document.addEventListener("fullscreenchange", onFsChange);
+  document.addEventListener("webkitfullscreenchange", onFsChange);
+  document.addEventListener("visibilitychange", async ()=>{
+    if(document.visibilityState==="visible" && fsEl() && !fsLock){
+      try{ fsLock = await navigator.wakeLock.request("screen"); }catch(e){}
+    }
+  });
+
+  async function toggleAwake(){
+    if(wakeLock){ try{ await wakeLock.release(); }catch(e){} wakeLock = null; if(openId) renderSheet(); return; }
+    try{
+      wakeLock = await navigator.wakeLock.request("screen");
+      wakeLock.addEventListener("release", ()=>{ wakeLock = null; if(openId) renderSheet(); });
+      toast("The screen will stay on while this page is open");
+    }catch(e){ wakeLock = null; toast("This device won't keep the screen on from here. Turn off auto-lock in its settings instead."); }
+    if(openId) renderSheet();
+  }
+
+  function renderSheet(){
+    const m = openId && findMeal(openId);
+    if(!m){ closeSheet(); return; }
+    const next = mealOn(addDays(m.date,1));
+    let h = '<div class="head"><div><span class="eyebrow">'+fmt(m.date,{weekday:"long",month:"short",day:"numeric"})+'</span><div class="meal-title" id="sheetTitle">'+esc(m.title)+'</div></div>'+
+      '<button type="button" class="iconbtn" data-act="close" aria-label="Close">'+X+'</button></div>'+
+      '<div class="stack" style="margin-top:10px"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+chip(m.kind)+(m.kind==="cook"?'<span class="muted" style="font-size:.85rem">Cook night '+cookNo(m)+'</span>':'')+'</div>'+
+      (m.details?'<p>'+esc(m.details)+'</p>':'');
+    if(m.from){ const src = findMeal(m.from); if(src && src.recipe) h += '<button type="button" class="btn small ghost" style="align-self:flex-start" data-act="open" data-id="'+esc(src.id)+'">See '+fmt(src.date,{weekday:"long"})+'\'s recipe</button>'; }
+    if(m.thaw) h += '<div class="thaw">'+SNOW+'<div class="body"><span><strong>Thaw the night before:</strong> '+esc(m.thaw)+'.'+(m.thawDone?' Moved to the fridge.':'')+'</span>'+(m.thawDone||proposed(m)||m._col==="history"?'':'<div><button class="btn small ice" type="button" data-act="thaw" data-id="'+esc(m.id)+'">Done, it\'s in the fridge</button></div>')+'</div></div>';
+    if(next && next.thaw && !next.thawDone) h += '<span class="thawline">'+SNOW.replace('class="ico"','width="14" height="14"')+'Tonight, move '+esc(next.thaw)+' to the fridge for tomorrow.</span>';
+    if(m.date<=today() || m.rating) h += '<div><span class="eyebrow">Your rating</span><div>'+starsHtml(m,false)+'</div></div>';
+    h += '</div>' + recipeHtml(m);
+    $("sheetDyn").innerHTML = h;
+    const ns = notesFor(m.id);
+    $("sheetNotes").innerHTML = ns.length ? ns.map(n=>'<li><span class="txt">'+esc(n.text)+(n.at?'<time>'+new Date(n.at).toLocaleDateString("en-US",{month:"short",day:"numeric"})+'</time>':'')+'</span><button type="button" class="iconbtn" data-act="delNote" data-id="'+esc(n.id)+'" aria-label="Delete note">'+X+'</button></li>').join("") : '<li class="muted" style="background:transparent;padding-left:0">No notes yet.</li>';
+    const fixed = m.date<today() || proposed(m) || m._col==="history";
+    $("replaceWrap").hidden = !proposed(m);
+    $("replaceBtn").innerHTML = proposed(m) ? '<button type="button" class="btn small'+(m.swapOut?'':' ghost')+'" data-act="swapout" data-id="'+esc(m.id)+'" aria-pressed="'+(!!m.swapOut)+'">'+(m.swapOut?'Marked to replace. Tap to keep it':'Replace this meal')+'</button>' : "";
+    $("pushWrap").hidden = fixed;
+    $("pushBtns").innerHTML = fixed ? "" : pushHtml(m,false);
+    const others = meals().filter(x=>x.id!==m.id && x.date>=today() && !proposed(x));
+    $("swapWrap").hidden = !others.length || fixed;
+    $("swapList").innerHTML = others.map(o=>'<button type="button" data-act="swap" data-a="'+esc(m.id)+'" data-b="'+esc(o.id)+'"><b>'+fmt(o.date,{weekday:"short",month:"short",day:"numeric"})+'</b>'+esc(o.title)+'</button>').join("");
+  }
+
+  function render(){
+    renderHeader(); renderToday(); renderPlan(); renderShop(); renderFeedback();
+    if(openId) renderSheet();
+  }
+
+  function setTab(t){
+    tab = t;
+    ["today","plan","shop","feedback"].forEach(x=>{ $("v-"+x).hidden = x!==t; });
+    document.querySelectorAll(".nav button").forEach(b=>{ if(b.dataset.tab===t) b.setAttribute("aria-current","page"); else b.removeAttribute("aria-current"); });
+    renderHeader(); window.scrollTo(0,0);
+    try{ history.replaceState(null,"","#"+t); }catch(e){}
+  }
+  function openSheet(id){ openId = id; $("scrim").hidden = false; $("sheet").hidden = false; $("noteInput").value = ""; renderSheet(); $("sheet").scrollTop = 0; }
+  function closeSheet(){ openId = null; $("scrim").hidden = true; $("sheet").hidden = true; }
+
+  let toastT;
+  let toastUndo = null;
+  function toast(msg, undo){
+    const el = $("toast"); el.textContent = ""; toastUndo = undo || null;
+    const sp = document.createElement("span"); sp.textContent = msg; el.appendChild(sp);
+    if(undo){ const b = document.createElement("button"); b.type = "button"; b.dataset.act = "undo"; b.textContent = "Undo"; el.appendChild(b); }
+    el.hidden = false; clearTimeout(toastT); toastT = setTimeout(()=>{ el.hidden = true; toastUndo = null; }, undo ? 8000 : 2600);
+  }
+
+  async function save(fn, ok){
+    if(!db){ toast("The shared plan isn't available in this view."); return false; }
+    if(readOnly){ toast("You can view this plan but not change it. Ask the owner to share it with you as an Editor."); return false; }
+    const run = async () => { await fn(); if(ok) toast(ok); return true; };
+    try{ return await run(); }
+    catch(e){
+      const c = e && e.code;
+      if(c==="invalid_argument"){ readOnly = true; toast("You can view this plan but not change it. Ask the owner to share it with you as an Editor."); }
+      else if(c==="unavailable"){ await new Promise(r=>setTimeout(r,500+Math.random()*700)); try{ return await run(); }catch(e2){ toast("Couldn't save. Check your connection and try again."); } }
+      else if(c==="quota_exceeded"){ toast("The board's storage is full. Clear out old notes or items, then try again."); }
+      else toast("Couldn't save that change. Try again.");
+      return false;
+    }
+  }
+
+  document.addEventListener("click", e=>{
+    const tb = e.target.closest("[data-tab]"); if(tb){ setTab(tb.dataset.tab); return; }
+    if(e.target.id==="scrim"){ closeSheet(); return; }
+    if(e.target.id==="copyScrim"){ $("copyScrim").hidden = true; $("copySheet").hidden = true; return; }
+    const b = e.target.closest("[data-act]"); if(!b) return;
+    const id = b.dataset.id, act = b.dataset.act;
+    if(act==="open") openSheet(id);
+    else if(act==="close") closeSheet();
+    else if(act==="awake") toggleAwake();
+    else if(act==="fullscreen") toggleFullscreen();
+    else if(act==="copy") copyOrder();
+    else if(act==="closeCopy"){ $("copyScrim").hidden = true; $("copySheet").hidden = true; }
+    else if(act==="push") pushBack(id, +b.dataset.n);
+    else if(act==="undo"){ const fn = toastUndo; toastUndo = null; $("toast").hidden = true; if(fn) fn(); }
+    else if(act==="tick"){ const k = b.dataset.k; if(checked.has(k)) checked.delete(k); else checked.add(k); renderSheet(); }
+    else if(act==="rate"){ const m = findMeal(id); if(!m) return; const v = +b.dataset.v; save(()=>mref(m).update({rating: m.rating===v ? 0 : v}), "Rating saved"); }
+    else if(act==="thaw"){ const m = findMeal(id); if(m) save(()=>mref(m).update({thawDone:true}), "Marked as thawing"); }
+    else if(act==="swapout"){ const m = findMeal(id); if(m) save(()=>mref(m).update({swapOut: !m.swapOut}), m.swapOut ? "Keeping it" : "Marked to replace"); }
+    else if(act==="approve") save(()=>db.doc("plan/current").update({status:"approved", approvedAt:new Date().toISOString()}), "Plan approved");
+    else if(act==="ordered") save(async()=>{
+        const inc = (S.dplan && S.dplan.included) || {};
+        for(const g of (inc.grocery||[])) if(S.grocery.find(x=>x.id===g)) await db.doc("grocery/"+g).delete();
+        for(const st of (inc.staples||[])) if(S.staples.find(x=>x.id===st)) await db.doc("staples/"+st).update({status:"have"});
+        await db.doc("plan/current").update({status:"ordered", orderedAt:new Date().toISOString(), statusNote:""});
+      }, "Order marked as placed");
+    else if(act==="swap"){
+      const a = findMeal(b.dataset.a), c = findMeal(b.dataset.b); if(!a||!c) return;
+      save(async()=>{ await mref(a).update({date:c.date}); await mref(c).update({date:a.date}); },
+        a.title+" moved to "+fmt(c.date,{weekday:"long"})).then(ok=>{ if(ok) closeSheet(); });
+    }
+    else if(act==="delNote") save(()=>db.doc("notes/"+id).delete(), "Note deleted");
+    else if(act==="delGrocery") save(()=>db.doc("grocery/"+id).delete());
+    else if(act==="staple") save(()=>db.doc("staples/"+id).update({status:b.dataset.v}));
+    else if(act==="delFreezer") save(()=>db.doc("freezer/"+id).delete(), "Removed from the freezer list");
+    else if(act==="delIdea") save(()=>db.doc("ideas/"+id).delete());
+  });
+  document.addEventListener("keydown", e=>{ if(e.key==="Escape" && openId) closeSheet(); });
+
+  document.querySelectorAll(".js-add-grocery").forEach(f=>f.addEventListener("submit", async e=>{
+    e.preventDefault(); const inp = f.querySelector("input"); const text = inp.value.trim(); if(!text) return;
+    if(await save(()=>db.collection("grocery").add({text, at:new Date().toISOString()}), "Added to the next order")) inp.value = "";
+  }));
+  $("noteForm").addEventListener("submit", async e=>{
+    e.preventDefault(); const text = $("noteInput").value.trim(); if(!text || !openId) return;
+    if(await save(()=>db.collection("notes").add({meal:openId, text, at:new Date().toISOString()}), "Note saved")) $("noteInput").value = "";
+  });
+  $("ideaForm").addEventListener("submit", async e=>{
+    e.preventDefault(); const text = $("addIdea").value.trim(); if(!text) return;
+    if(await save(()=>db.collection("ideas").add({text, at:new Date().toISOString()}), "Request saved")) $("addIdea").value = "";
+  });
+  $("freezerForm").addEventListener("submit", async e=>{
+    e.preventDefault(); const name = $("addFreezer").value.trim(); if(!name) return;
+    if(await save(()=>db.collection("freezer").add({name, at:new Date().toISOString()}), "Added to the freezer list")) $("addFreezer").value = "";
+  });
+
+  const h0 = (location.hash||"").slice(1);
+  setTab(["today","plan","shop","feedback"].includes(h0) ? h0 : "today");
+  render();
+
+  // Re-render at midnight so "tonight" rolls over on a wall display.
+  setInterval(()=>{ const k = today(); if(k!==render.lastDay){ render.lastDay = k; render(); } }, 60000);
+  render.lastDay = today();
+
+  (async ()=>{
+    try{ db = window.claude && window.claude.use ? await window.claude.use("db") : null; }catch(e){ db = null; }
+    if(!db){ dbState = "none"; $("dbNotice").hidden = false; render(); return; }
+    dbState = "ready";
+    try{
+      const user = await window.claude.use("user");
+      if(user && user.can){ const w = await user.can("data.write"); if(w===false) readOnly = true; }
+    }catch(e){}
+    ["meals","draft","history","notes","grocery","staples","freezer","ideas"].forEach(c=>{
+      db.collection(c).onSnapshot(snap=>{
+        S[c] = snap.docs.map(d=>Object.assign({}, d.data(), {id:d.id, _col:c})); S.loaded[c] = true; render();
+      }, err=>{ S.loaded[c] = true; render(); });
+    });
+    db.doc("plan/current").onSnapshot(s=>{ S.plan = s.exists ? s.data() : null; render(); }, ()=>{});
+    db.doc("plan/draft").onSnapshot(s=>{ S.dplan = s.exists ? s.data() : null; render(); }, ()=>{});
+  })();
+})();
+</script>

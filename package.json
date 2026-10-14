@@ -1,0 +1,12 @@
+{
+  "name": "dinnerboard-automation",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "plan-draft": "node scripts/plan-draft.mjs",
+    "grocery-list": "node scripts/grocery-list.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0"
+  }
+}

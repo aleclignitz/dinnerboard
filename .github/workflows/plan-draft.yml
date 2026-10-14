@@ -1,0 +1,24 @@
+name: Tuesday plan draft
+
+on:
+  schedule:
+    # 11:50 UTC ~= 6:50 AM America/Chicago (CST). Adjust for your time zone/DST.
+    - cron: "50 11 * * 2"
+  workflow_dispatch: {}
+
+jobs:
+  draft:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install
+      - run: node scripts/plan-draft.mjs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PLAN_TIME_ZONE: America/Chicago
+          PLAN_GUIDELINES: ${{ vars.PLAN_GUIDELINES }}
