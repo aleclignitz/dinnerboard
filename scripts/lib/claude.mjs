@@ -24,7 +24,10 @@ export async function askClaude({ system, prompt, maxTokens = 4000 }) {
 
 // Claude sometimes wraps JSON replies in ```/```json fences despite being
 // told not to - strip those before parsing instead of failing on them.
+// A closing fence may be missing if the reply got cut off by max_tokens.
 export function parseClaudeJson(raw) {
   const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-  return JSON.parse(fenced ? fenced[1] : raw);
+  if (fenced) return JSON.parse(fenced[1]);
+  const opened = raw.match(/```(?:json)?\s*([\s\S]*)/i);
+  return JSON.parse(opened ? opened[1] : raw);
 }

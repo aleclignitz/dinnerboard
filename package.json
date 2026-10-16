@@ -6,6 +6,7 @@
     "plan-draft": "node scripts/plan-draft.mjs",
     "grocery-list": "node scripts/grocery-list.mjs",
     "fetch-weekly-ad": "node scripts/fetch-weekly-ad.mjs",
+    "capture-tomthumb-session": "node scripts/capture-tomthumb-session.mjs",
     "load-recipes": "node scripts/load-recipes.mjs"
   },
   "dependencies": {

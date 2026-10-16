@@ -5,53 +5,40 @@
 // frameLocator() can reach into it directly (verified: page.frames()/
 // $$eval do NOT see this content, frameLocator() does).
 //
-// Store selection (zip -> nearby stores -> pick one) is a multi-step UI
-// flow reverse-engineered by hand; selectors are text/role based to survive
-// minor markup changes, but Tom Thumb could still change this layout.
-// Always test with `workflow_dispatch` after any failure before trusting
-// the cron run - see README.
+// Store selection used to be a live UI flow (zip -> nearby stores -> pick
+// one), but Tom Thumb's site appears to block or no-op synthetic clicks on
+// that flow in automated browsers (confirmed: works with a real mouse click
+// in a headful window, fails consistently - headless or headful - when
+// driven by Playwright's locator.click()). Instead, a logged-in/store-
+// selected session is captured once by hand (see
+// `scripts/capture-tomthumb-session.mjs`) and reused headlessly via
+// Playwright's storageState, skipping the UI entirely. If the store ever
+// changes or the session expires, re-run that capture script and update the
+// TOM_THUMB_STORAGE_STATE secret.
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { getSupabase, getDoc, setDoc } from "./lib/supabaseClient.mjs";
 import { askClaude, parseClaudeJson } from "./lib/claude.mjs";
 
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const AD_URL = "https://www.tomthumb.com/weeklyad";
-const ZIP = process.env.TOM_THUMB_ZIP || "75214";
 const STORE_ADDRESS = process.env.TOM_THUMB_STORE_ADDRESS || "6333 E Mockingbird Ln";
 const MIN_DEALS = 20;
 const FETCH_ATTEMPTS = 4;
 
-// Nav drawer -> "Instore at ..." entry -> zip textbox -> store list -> Select.
-async function selectStore(page, { zip, storeAddress }) {
-  await page.goto("https://www.tomthumb.com/", { waitUntil: "domcontentloaded" });
-  await page.waitForTimeout(2000);
-
-  await page.getByRole("button", { name: /navigation menu/i }).click();
-  await page.waitForTimeout(1000);
-
-  const storeEntry = page.getByRole("button", { name: /instore at|choose.*store|select.*store/i }).first();
-  await storeEntry.waitFor({ state: "visible", timeout: 10000 });
-  await storeEntry.click();
-  await page.waitForTimeout(1000);
-
-  const zipBox = page.getByRole("textbox", { name: /zip/i }).or(page.getByPlaceholder(/zip/i)).first();
-  await zipBox.waitFor({ state: "visible", timeout: 10000 });
-  await zipBox.fill(zip);
-  await page.getByRole("button", { name: /search.*zip/i }).first().click();
-  await page.waitForTimeout(2000);
-
-  // Results are tabbed by fulfillment method - make sure we're looking at
-  // in-store pickup/ad locations, not delivery-only ones.
-  await page.getByRole("tab", { name: /in ?store/i }).click({ timeout: 3000 }).catch(() => {});
-  await page.waitForTimeout(500);
-
-  const row = page.getByText(storeAddress, { exact: false }).first();
-  await row.waitFor({ state: "visible", timeout: 10000 });
-  const selectBtn = row
-    .locator("xpath=ancestor::*[self::li or self::div][1]")
-    .getByRole("button", { name: /select/i })
-    .first();
-  await selectBtn.click();
-  await page.waitForTimeout(1500);
+// TOM_THUMB_STORAGE_STATE (CI secret, raw JSON) takes precedence; falls
+// back to a local file for development (see capture-tomthumb-session.mjs).
+function loadStorageState() {
+  if (process.env.TOM_THUMB_STORAGE_STATE) {
+    return JSON.parse(process.env.TOM_THUMB_STORAGE_STATE);
+  }
+  const localPath = path.join(SCRIPT_DIR, "_tomthumb-storageState.json");
+  if (fs.existsSync(localPath)) {
+    return JSON.parse(fs.readFileSync(localPath, "utf8"));
+  }
+  return null;
 }
 
 // Nav controls ("Move to the left", "Move Up", ...) share the same <button>
@@ -98,15 +85,33 @@ Return JSON with exactly this shape:
   "coupons": ["cart-level or whole-order coupons that need clipping, e.g. $10 off $75 purchase"]
 }
 Only put real protein sale items in "proteinDeals" (skip household/beauty/floral/etc there, but still include them in "deals"). Dedupe near-identical lines.`;
-  const raw = await askClaude({ system, prompt, maxTokens: 4000 });
+  const raw = await askClaude({ system, prompt, maxTokens: 8000 });
   return parseClaudeJson(raw);
 }
 
 async function scrapeAd() {
+  const storageState = loadStorageState();
+  if (!storageState) {
+    return {
+      ok: false,
+      error: "No Tom Thumb session found. Run `node scripts/capture-tomthumb-session.mjs` once and set the TOM_THUMB_STORAGE_STATE secret."
+    };
+  }
+
   const browser = await chromium.launch();
   try {
-    const page = await browser.newPage();
-    await selectStore(page, { zip: ZIP, storeAddress: STORE_ADDRESS });
+    const context = await browser.newContext({ storageState });
+    const page = await context.newPage();
+    await page.goto(AD_URL, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(3000);
+    const bodyText = await page.locator("body").innerText().catch(() => "");
+    if (!bodyText.includes(STORE_ADDRESS)) {
+      return {
+        ok: false,
+        error: `Saved session didn't land on the expected store (looked for "${STORE_ADDRESS}"). It may have expired - re-run capture-tomthumb-session.mjs and update the TOM_THUMB_STORAGE_STATE secret.`
+      };
+    }
+
     const labels = await fetchDealLabelsWithRetry(page);
     if (!labels.length) {
       return { ok: false, error: "No deals found after retries - ad widget may not have rendered, or the site layout changed." };

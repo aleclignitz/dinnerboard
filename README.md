@@ -30,6 +30,7 @@ tools/build_board.py        Rebuilds docs/ from board/ after any change
 tools/import_recipes.py     Converts an nyt-cooking-parser sqlite export into a staging JSON file
 sql/schema.sql              The `documents` table + `recipes` table, Row Level Security, realtime
 scripts/fetch-weekly-ad.mjs  Wednesday job: scrapes the Tom Thumb weekly ad (headless Playwright), writes ads/current
+scripts/capture-tomthumb-session.mjs  One-off/manual: opens a real browser so you can pick the store, saves a reusable session
 scripts/plan-draft.mjs      Wednesday job: promotes a due draft, writes the next plan (sale-biased protein picks)
 scripts/grocery-list.mjs    Wednesday job: finalizes swaps, builds the grocery list (adds coupons-to-clip)
 scripts/load-recipes.mjs    One-off job: bulk-upserts the staging JSON into Supabase's recipes table
@@ -44,11 +45,36 @@ scripts/lib/                Supabase + Claude API helpers used by the jobs above
 2. **Keys**: in Supabase, go to Settings → API Keys. Put the project URL and **publishable key** (`sb_publishable_...`) in [board/config.js](board/config.js) - safe to commit, it's restricted by RLS. Keep the **secret key** (`sb_secret_...`) out of this repo entirely; it only goes into GitHub Actions secrets and your local `.env`.
 3. **Build the site**: `python tools/build_board.py` whenever `board/` changes, then commit `docs/`.
 4. **GitHub Pages**: Settings → Pages → Deploy from branch → `main` / `docs`.
-5. **GitHub Actions secrets** (Settings → Secrets and variables → Actions): `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `ANTHROPIC_API_KEY`.
-6. **GitHub Actions variables** (same screen, Variables tab): `PLAN_GUIDELINES`, `PLAN_MAX_COOK_MINUTES`, `STORE_NAME`, `ORDER_METHOD` (`pickup` or `delivery`, defaults to `delivery`), `PICKUP_WINDOW` (only used when `ORDER_METHOD=pickup`, defaults to `1-4 PM`), `SUBSTITUTION_RULES`, `TOM_THUMB_ZIP`, `TOM_THUMB_STORE_ADDRESS` (the exact store address string shown on tomthumb.com's store picker, used to pick the right nearby store).
-7. **Seed data**: insert your current `meals`, `staples`, `freezer`, and `plan/current` (with `guidelines`) rows into the `documents` table before the first scheduled run.
-8. **Sign in** once on the deployed board via the magic-link prompt before testing.
-9. **Test manually** first via Actions → workflow_dispatch, rather than waiting on the cron schedule.
+5. **GitHub Actions secrets** (Settings → Secrets and variables → Actions): `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `ANTHROPIC_API_KEY`, `TOM_THUMB_STORAGE_STATE` (see step 7 below).
+6. **GitHub Actions variables** (same screen, Variables tab): `PLAN_GUIDELINES`, `PLAN_MAX_COOK_MINUTES`, `STORE_NAME`, `ORDER_METHOD` (`pickup` or `delivery`, defaults to `delivery`), `PICKUP_WINDOW` (only used when `ORDER_METHOD=pickup`, defaults to `1-4 PM`), `SUBSTITUTION_RULES`, `TOM_THUMB_STORE_ADDRESS` (the exact store address string shown on tomthumb.com's store picker, used to confirm the right store loaded).
+7. **Capture a Tom Thumb session**: tomthumb.com's store-picker UI blocks/no-ops automated clicks, so the store is selected by hand once and reused headlessly - see [Tom Thumb weekly ad scraping](#tom-thumb-weekly-ad-scraping) below before the first run.
+8. **Seed data**: insert your current `meals`, `staples`, `freezer`, and `plan/current` (with `guidelines`) rows into the `documents` table before the first scheduled run.
+9. **Sign in** once on the deployed board via the magic-link prompt before testing.
+10. **Test manually** first via Actions → workflow_dispatch, rather than waiting on the cron schedule.
+
+## Tom Thumb weekly ad scraping
+
+[scripts/fetch-weekly-ad.mjs](scripts/fetch-weekly-ad.mjs) runs headless every Wednesday morning, scrapes the current weekly ad from tomthumb.com, and writes a structured summary (`proteinDeals`, `deals`, `coupons`) to Supabase `ads/current`, which `plan-draft.mjs`/`grocery-list.mjs` read for sale-biased picks and a coupons-to-clip list.
+
+tomthumb.com's store-picker UI (hamburger menu → zip → select store) silently blocks/no-ops Playwright's automated clicks - this looks like anti-bot detection, since the exact same click sequence works instantly with a real mouse in the same browser window. Rather than fight that, the store is selected **once by hand** and the resulting session (cookies + localStorage) is reused headlessly on every run, skipping the UI entirely.
+
+**Capturing/refreshing the session:**
+
+```
+npm run capture-tomthumb-session
+```
+
+This opens a real (headful) browser window and walks you through it in the terminal:
+1. Dismiss the cookie banner if shown.
+2. Click the hamburger/navigation menu icon (top-left).
+3. Click the store address button in the drawer.
+4. Enter your zip code and search.
+5. Click "In Store" if needed, then **Select** on your store's address.
+6. Press Enter in the terminal once the store is selected.
+
+It then confirms the weekly ad shows the right store, saves the session to `scripts/_tomthumb-storageState.json` (gitignored - never commit it), and reminds you to copy its contents into the `TOM_THUMB_STORAGE_STATE` GitHub Actions secret. Locally, `fetch-weekly-ad.mjs` will use that file automatically if `TOM_THUMB_STORAGE_STATE` isn't set in the environment, so no copy/paste is needed for local test runs.
+
+**When to re-run it:** sessions can expire. If `fetch-weekly-ad.yml` fails/writes `ok:false` with an error like *"Saved session didn't land on the expected store"* or *"No Tom Thumb session found"*, re-run the capture command and update the `TOM_THUMB_STORAGE_STATE` secret. The job degrades gracefully either way - `plan-draft`/`grocery-list` still run without sale bias and the Muse grocery list gets a note that deal-finding failed, so a stale/missing session is never a hard blocker, just a missed optimization for that week.
 
 ## Recipe dataset
 

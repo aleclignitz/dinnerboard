@@ -1,3 +1,5 @@
 node_modules/
 .env
 .recipes-staging.json
+scripts/_tomthumb-storageState.json
+scripts/_debug*

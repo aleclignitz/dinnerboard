@@ -21,5 +21,5 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          TOM_THUMB_ZIP: ${{ vars.TOM_THUMB_ZIP }}
           TOM_THUMB_STORE_ADDRESS: ${{ vars.TOM_THUMB_STORE_ADDRESS }}
+          TOM_THUMB_STORAGE_STATE: ${{ secrets.TOM_THUMB_STORAGE_STATE }}
