@@ -1,4 +1,4 @@
-/*
+*
  * Supabase adapter for Supper Board.
  *
  * The board (board/supper-board.html) only ever calls
@@ -137,7 +137,9 @@
       '<form style="max-width:320px;width:100%;display:flex;flex-direction:column;gap:12px">' +
       '<h1 style="font-size:1.2rem;margin:0">Sign in to Supper Board</h1>' +
       '<input type="email" required placeholder="you@example.com" style="padding:10px;border:1px solid #ccc;border-radius:8px">' +
-      '<button type="submit" style="padding:10px;border:0;border-radius:8px;background:#B5322A;color:#fff;font-weight:700">Send magic link</button>' +
+      '<input type="password" placeholder="Password (optional)" style="padding:10px;border:1px solid #ccc;border-radius:8px">' +
+      '<button type="submit" style="padding:10px;border:0;border-radius:8px;background:#B5322A;color:#fff;font-weight:700">Sign in</button>' +
+      '<p style="font-size:.8rem;color:#7A6354;margin:0">Leave the password blank to get a magic link by email instead.</p>' +
       '<p class="sb-status" style="font-size:.85rem;color:#7A6354;margin:0"></p>' +
       '</form>';
     document.body.appendChild(bar);
@@ -145,10 +147,17 @@
     var status = bar.querySelector(".sb-status");
     form.addEventListener("submit", async function (e) {
       e.preventDefault();
-      var email = form.querySelector("input").value.trim();
-      status.textContent = "Sending...";
-      var res = await client.auth.signInWithOtp({ email: email, options: { emailRedirectTo: location.href } });
-      status.textContent = res.error ? ("Error: " + res.error.message) : "Check your email for the link.";
+      var email = form.querySelector('input[type="email"]').value.trim();
+      var password = form.querySelector('input[type="password"]').value;
+      if (password) {
+        status.textContent = "Signing in...";
+        var res = await client.auth.signInWithPassword({ email: email, password: password });
+        status.textContent = res.error ? ("Error: " + res.error.message) : "";
+      } else {
+        status.textContent = "Sending...";
+        var res2 = await client.auth.signInWithOtp({ email: email, options: { emailRedirectTo: location.href } });
+        status.textContent = res2.error ? ("Error: " + res2.error.message) : "Check your email for the link.";
+      }
     });
   }
 
