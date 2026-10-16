@@ -19,6 +19,9 @@ export async function askClaude({ system, prompt, maxTokens = 4000 }) {
   });
   if (!res.ok) throw new Error(`Claude API error ${res.status}: ${await res.text()}`);
   const json = await res.json();
+  if (json.stop_reason === "max_tokens") {
+    console.warn("Claude reply was cut off by max_tokens - response is likely truncated/incomplete.");
+  }
   return json.content.map((block) => block.text || "").join("");
 }
 
@@ -29,5 +32,55 @@ export function parseClaudeJson(raw) {
   const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
   if (fenced) return JSON.parse(fenced[1]);
   const opened = raw.match(/```(?:json)?\s*([\s\S]*)/i);
-  return JSON.parse(opened ? opened[1] : raw);
+  const text = opened ? opened[1] : raw;
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    return repairTruncatedJson(text);
+  }
+}
+
+// Best-effort recovery for a reply cut off mid-element by max_tokens: walk
+// the text tracking string/nesting state, find the last point where a value
+// was fully complete, truncate there, and close any still-open brackets -
+// using the bracket stack as it stood AT that point, not at end of text.
+function repairTruncatedJson(text) {
+  const stack = [];
+  let inString = false;
+  let escape = false;
+  let lastSafeIndex = -1;
+  let lastSafeStack = null;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escape) escape = false;
+      else if (ch === "\\") escape = true;
+      else if (ch === '"') {
+        inString = false;
+        lastSafeIndex = i;
+        lastSafeStack = stack.slice();
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+    } else if (ch === "{" || ch === "[") {
+      stack.push(ch);
+    } else if (ch === "}" || ch === "]") {
+      stack.pop();
+      lastSafeIndex = i;
+      lastSafeStack = stack.slice();
+    } else if (ch === ",") {
+      lastSafeIndex = i - 1;
+      lastSafeStack = stack.slice();
+    }
+  }
+  if (lastSafeIndex < 0 || !lastSafeStack || lastSafeStack.length === 0) {
+    throw new Error("Could not repair truncated JSON reply");
+  }
+  let truncated = text.slice(0, lastSafeIndex + 1);
+  for (let i = lastSafeStack.length - 1; i >= 0; i--) {
+    truncated += lastSafeStack[i] === "{" ? "}" : "]";
+  }
+  return JSON.parse(truncated);
 }

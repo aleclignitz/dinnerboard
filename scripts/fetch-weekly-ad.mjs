@@ -73,7 +73,28 @@ async function fetchDealLabelsWithRetry(page) {
   return [];
 }
 
-async function structureDeals(labels) {
+// Structuring the whole week's labels in one Claude call risks the reply
+// getting cut off by max_tokens on a big ad (seen in production - the reply
+// was truncated mid-JSON). Batch instead so no single call's output can
+// grow unbounded, and merge the per-batch results back together.
+const STRUCTURE_BATCH_SIZE = 60;
+
+function dedupe(items) {
+  return [...new Set(items)];
+}
+
+function mergeProteinDeals(batches) {
+  const byProtein = new Map();
+  for (const deals of batches) {
+    for (const { protein, items } of deals) {
+      if (!protein) continue;
+      byProtein.set(protein, (byProtein.get(protein) || []).concat(items || []));
+    }
+  }
+  return [...byProtein.entries()].map(([protein, items]) => ({ protein, items: dedupe(items) }));
+}
+
+async function structureDealsBatch(labels) {
   const system = "You convert raw grocery weekly-ad deal text into structured JSON only, no prose.";
   const prompt = `Raw deal labels scraped from this week's Tom Thumb weekly ad (each is one ad tile's accessible name - may list several product options separated by "or", a price, and whether a digital coupon needs clipping):
 ${JSON.stringify(labels)}
@@ -85,8 +106,28 @@ Return JSON with exactly this shape:
   "coupons": ["cart-level or whole-order coupons that need clipping, e.g. $10 off $75 purchase"]
 }
 Only put real protein sale items in "proteinDeals" (skip household/beauty/floral/etc there, but still include them in "deals"). Dedupe near-identical lines.`;
-  const raw = await askClaude({ system, prompt, maxTokens: 8000 });
+  const raw = await askClaude({ system, prompt, maxTokens: 4000 });
   return parseClaudeJson(raw);
+}
+
+async function structureDeals(labels) {
+  const batches = [];
+  for (let i = 0; i < labels.length; i += STRUCTURE_BATCH_SIZE) {
+    batches.push(labels.slice(i, i + STRUCTURE_BATCH_SIZE));
+  }
+  const results = [];
+  for (const batch of batches) {
+    try {
+      results.push(await structureDealsBatch(batch));
+    } catch (err) {
+      console.log(`Batch of ${batch.length} deals failed to structure, skipping: ${err.message}`);
+    }
+  }
+  return {
+    proteinDeals: mergeProteinDeals(results.map((r) => r.proteinDeals || [])),
+    deals: dedupe(results.flatMap((r) => r.deals || [])),
+    coupons: dedupe(results.flatMap((r) => r.coupons || []))
+  };
 }
 
 async function scrapeAd() {
@@ -117,6 +158,9 @@ async function scrapeAd() {
       return { ok: false, error: "No deals found after retries - ad widget may not have rendered, or the site layout changed." };
     }
     const structured = await structureDeals(labels);
+    if (!structured.deals.length && !structured.proteinDeals.length) {
+      return { ok: false, error: `Found ${labels.length} raw deal labels but Claude failed to structure all batches - see logs above.` };
+    }
     return {
       ok: true,
       store: STORE_ADDRESS,
