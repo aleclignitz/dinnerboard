@@ -11,6 +11,7 @@
 //
 // Re-run this whenever fetch-weekly-ad.mjs starts failing with a "session
 // didn't land on the expected store" / expired-session error.
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import readline from "node:readline/promises";
@@ -19,6 +20,23 @@ import { chromium } from "playwright";
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const OUTPUT_PATH = path.join(SCRIPT_DIR, "_tomthumb-storageState.json");
 const STORE_ADDRESS = process.env.TOM_THUMB_STORE_ADDRESS || "6333 E Mockingbird Ln";
+const BASE_DOMAIN = "tomthumb.com";
+// GitHub Actions secrets cap out around 48KB. The captured session also
+// picks up ~30 third-party ad-tracker cookies and large unrelated cached
+// blobs (e.g. nav-menu component data) that have nothing to do with store
+// selection - drop those rather than hit the limit.
+const MAX_LOCALSTORAGE_VALUE_CHARS = 5000;
+
+function trimStorageState(state) {
+  const cookies = state.cookies.filter((c) => c.domain.includes(BASE_DOMAIN));
+  const origins = state.origins
+    .filter((o) => o.origin.includes(BASE_DOMAIN))
+    .map((o) => ({
+      origin: o.origin,
+      localStorage: o.localStorage.filter((item) => item.value.length <= MAX_LOCALSTORAGE_VALUE_CHARS)
+    }));
+  return { cookies, origins };
+}
 
 const browser = await chromium.launch({ headless: false });
 const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
@@ -46,8 +64,10 @@ try {
     console.log(`Confirmed: weekly ad is showing ${STORE_ADDRESS}.`);
   }
 
-  await context.storageState({ path: OUTPUT_PATH });
-  console.log(`Saved session to ${OUTPUT_PATH}`);
+  const trimmed = trimStorageState(await context.storageState());
+  const json = JSON.stringify(trimmed);
+  fs.writeFileSync(OUTPUT_PATH, json);
+  console.log(`Saved session to ${OUTPUT_PATH} (${json.length} bytes).`);
   console.log("Copy its contents into the TOM_THUMB_STORAGE_STATE GitHub secret for CI use.");
 } finally {
   rl.close();
