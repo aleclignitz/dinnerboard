@@ -21,3 +21,10 @@ export async function askClaude({ system, prompt, maxTokens = 4000 }) {
   const json = await res.json();
   return json.content.map((block) => block.text || "").join("");
 }
+
+// Claude sometimes wraps JSON replies in ```/```json fences despite being
+// told not to - strip those before parsing instead of failing on them.
+export function parseClaudeJson(raw) {
+  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  return JSON.parse(fenced ? fenced[1] : raw);
+}

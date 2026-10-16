@@ -19,3 +19,32 @@ create policy "household write" on documents
 
 -- Required for the board's live onSnapshot-style updates.
 alter publication supabase_realtime add table documents;
+
+-- Fixed recipe dataset (ported from an external scrape), read-only from the
+-- board/scripts. Loaded in bulk by scripts/load-recipes.mjs, not edited here.
+create table if not exists recipes (
+  id integer primary key,
+  title text not null,
+  url text,
+  description text,
+  tags text[] not null default '{}',
+  course text not null default 'other', -- 'entree' | 'side' | 'other', derived from tags at import time
+  protein text, -- 'chicken' | 'beef' | 'pork' | 'turkey' | 'lamb' | 'fish' | 'vegetarian' | null
+  rating real,
+  rating_count integer,
+  serves integer,
+  time_minutes integer,
+  oven text not null default '',
+  ingredients jsonb not null default '[]'::jsonb,
+  steps jsonb not null default '[]'::jsonb,
+  tip text not null default ''
+);
+
+alter table recipes enable row level security;
+
+create policy "household read recipes" on recipes
+  for select using (auth.role() = 'authenticated');
+
+create index if not exists recipes_course_idx on recipes (course);
+create index if not exists recipes_protein_idx on recipes (protein);
+create index if not exists recipes_time_minutes_idx on recipes (time_minutes);

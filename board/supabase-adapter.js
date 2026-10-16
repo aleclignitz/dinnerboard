@@ -1,5 +1,5 @@
 /*
- * Supabase adapter for Supper Board.
+ * Supabase adapter for Dinner Board.
  *
  * The board (board/supper-board.html) only ever calls
  * window.claude.use("db") and window.claude.use("user"), then uses the
@@ -135,7 +135,7 @@
     bar.style.cssText = "position:fixed;inset:0;background:#FBF4EA;z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;font-family:system-ui,sans-serif";
     bar.innerHTML =
       '<form style="max-width:320px;width:100%;display:flex;flex-direction:column;gap:12px">' +
-      '<h1 style="font-size:1.2rem;margin:0">Sign in to Supper Board</h1>' +
+      '<h1 style="font-size:1.2rem;margin:0">Sign in to Dinner Board</h1>' +
       '<input type="email" required placeholder="you@example.com" style="padding:10px;border:1px solid #ccc;border-radius:8px">' +
       '<input type="password" placeholder="Password (optional)" style="padding:10px;border:1px solid #ccc;border-radius:8px">' +
       '<button type="submit" style="padding:10px;border:0;border-radius:8px;background:#B5322A;color:#fff;font-weight:700">Sign in</button>' +

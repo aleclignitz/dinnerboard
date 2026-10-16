@@ -1,4 +1,4 @@
-<title>Supper Board</title>
+<title>Dinner Board</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&display=swap">
@@ -337,6 +337,10 @@ h2{font-size:1.15rem;font-weight:700}
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
       <span id="fsLabel">Full screen</span>
     </button>
+    <button type="button" class="fsbtn" id="automationBtn" data-act="automation" aria-pressed="false">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
+      <span id="automationLabel">Turn on automation</span>
+    </button>
   </div>
 </nav>
 
@@ -379,7 +383,7 @@ h2{font-size:1.15rem;font-weight:700}
 
 <script>
 (function(){
-  const S = {meals:[],draft:[],history:[],notes:[],grocery:[],staples:[],freezer:[],ideas:[],plan:null,dplan:null,loaded:{}};
+  const S = {meals:[],draft:[],history:[],notes:[],grocery:[],staples:[],freezer:[],ideas:[],plan:null,dplan:null,automation:null,loaded:{}};
   const checked = new Set(); let wakeLock = null;
   let db = null, dbState = "pending", readOnly = false, tab = "today", openId = null;
   const $ = id => document.getElementById(id);
@@ -432,6 +436,11 @@ h2{font-size:1.15rem;font-weight:700}
     if(st==="cart_built") return '<div class="status attn"><b>Your Walmart cart is ready</b><span>Open the Walmart app, check the cart'+(pickup?' and the '+esc(pickup)+' pickup time':'')+', then place the order.</span>'+note+'<div class="row"><button type="button" class="btn small" data-act="ordered">I placed the order</button></div></div>';
     if(st==="ordered") return '<div class="status"><b>Order placed</b><span>'+(pickup?'Pickup '+esc(pickup)+'. ':'')+(d.prep?esc(d.prep):'')+'</span>'+note+'</div>';
     return note ? '<div class="status attn"><b>Heads up</b>'+note+'</div>' : "";
+  }
+  function automationHtml(){
+    if(S.automation && S.automation.enabled === true) return "";
+    return '<div class="status attn"><b>Automation is off</b><span>Tuesday\'s plan draft and Thursday\'s grocery list will not run (no Anthropic calls) until you turn automation on.</span>'+
+      '<div class="row"><button type="button" class="btn small" data-act="automation">Turn on automation</button></div></div>';
   }
   const notesFor = id => S.notes.filter(n=>n.meal===id).sort((a,b)=>(a.at||"")<(b.at||"")?-1:1);
   function starsHtml(m, mini){
@@ -495,7 +504,7 @@ h2{font-size:1.15rem;font-weight:700}
     const cyw = cycleDates();
     $("cycleWide").textContent = cyw && status()==="active" && !S.draft.length ? "Next plan: draft "+short(cyw.draft)+" · list "+short(cyw.cart)+" · pickup "+short(cyw.pickup) : "";
     if(!S.loaded.meals){ return; }
-    let h = statusHtml("today");
+    let h = automationHtml() + statusHtml("today");
     const tm = mealOn(t), tomorrow = mealOn(addDays(t,1));
     if(!ms.length){
       h += '<div class="empty">No meal plan yet. Claude adds each two-week plan here, and it shows up for both of you.</div>';
@@ -551,7 +560,7 @@ h2{font-size:1.15rem;font-weight:700}
     const t = today(), cur = S.meals.slice().sort(byDate), nx = S.draft.slice().sort(byDate);
     if(dbState==="none"){ $("planDyn").innerHTML = ""; return; }
     if(!S.loaded.meals){ $("planDyn").innerHTML = '<div class="empty">Loading the plan…</div>'; return; }
-    let h = statusHtml("plan");
+    let h = automationHtml() + statusHtml("plan");
     if(!cur.length && !nx.length){ $("planDyn").innerHTML = h+'<div class="empty">No meal plan yet. Claude adds each two-week plan here.</div>'; return; }
     if(cur.length) h += blockHtml(cur, nx.length?"This plan":"", t, !h);
     const cy = cycleDates();
@@ -577,7 +586,7 @@ h2{font-size:1.15rem;font-weight:700}
   function renderShop(){
     if(dbState==="none"){ ["nextList","staplesDyn","freezerDyn"].forEach(i=>$(i).innerHTML=""); return; }
     if(dbState==="pending"){ $("nextList").innerHTML = '<div class="empty">Loading the list…</div>'; return; }
-    const sh = statusHtml("shop"); $("shopStatus").innerHTML = sh; $("shopStatus").hidden = !sh;
+    const sh = automationHtml() + statusHtml("shop"); $("shopStatus").innerHTML = sh; $("shopStatus").hidden = !sh;
     const d = S.dplan;
     $("planGroWrap").hidden = !(d && d.groceries && d.groceries.length);
     if(d && d.groceries){
@@ -630,7 +639,7 @@ h2{font-size:1.15rem;font-weight:700}
     const d = S.dplan || {};
     if(d.orderText) return d.orderText;
     const pickup = (S.plan && S.plan.pickup) || d.pickup || "Sunday afternoon";
-    const lines = ["Please build a Walmart pickup order for "+pickup+" with these items:",""];
+    const lines = ["Please build an order for "+pickup+" with these items:",""];
     (d.groceries||[]).forEach(g=>{ lines.push(g.section||"Groceries"); (g.items||[]).forEach(i=>lines.push("- "+i)); lines.push(""); });
     const extra = nextOrder();
     if(extra.length){ lines.push("Also add"); extra.forEach(i=>lines.push("- "+i.text)); lines.push(""); }
@@ -650,6 +659,7 @@ h2{font-size:1.15rem;font-weight:700}
     const fx = [r.serves?"Serves "+r.serves:"", r.time||"", r.oven?"Oven "+r.oven:""].filter(Boolean);
     let h = '<div class="recipe"><div class="section-head"><h2>Recipe</h2><button type="button" class="btn small ghost" data-act="awake" aria-pressed="'+(!!wakeLock)+'">'+(wakeLock?"Screen stays on":"Keep screen on")+'</button></div>';
     if(fx.length) h += '<div class="rfacts">'+fx.map(f=>'<span class="fact">'+esc(f)+'</span>').join("")+'</div>';
+    if(r.url) h += '<a class="btn small ghost" style="align-self:flex-start;display:inline-block;text-decoration:none" href="'+esc(r.url)+'" target="_blank" rel="noopener">View original recipe</a>';
     h += '<span class="eyebrow">Ingredients · tap as you go</span><ul class="ing">'+(r.ingredients||[]).map((x,i)=>{ const k = m.id+":i"+i, on = checked.has(k);
       return '<li><button type="button" data-act="tick" data-k="'+esc(k)+'" aria-pressed="'+on+'" class="'+(on?"on":"")+'"><span class="box" aria-hidden="true">'+(on?"✓":"")+'</span><span class="lbl">'+esc(x)+'</span></button></li>'; }).join("")+'</ul>';
     h += '<span class="eyebrow" style="margin-top:8px">Steps</span><ol class="steps">'+(r.steps||[]).map((x,i)=>{ const k = m.id+":s"+i, on = checked.has(k);
@@ -726,6 +736,9 @@ h2{font-size:1.15rem;font-weight:700}
   }
 
   function render(){
+    const on = !!(S.automation && S.automation.enabled === true);
+    $("automationBtn").setAttribute("aria-pressed", String(on));
+    $("automationLabel").textContent = on ? "Turn off automation" : "Turn on automation";
     renderHeader(); renderToday(); renderPlan(); renderShop(); renderFeedback();
     if(openId) renderSheet();
   }
@@ -774,6 +787,11 @@ h2{font-size:1.15rem;font-weight:700}
     else if(act==="close") closeSheet();
     else if(act==="awake") toggleAwake();
     else if(act==="fullscreen") toggleFullscreen();
+    else if(act==="automation"){
+      const next = !(S.automation && S.automation.enabled === true);
+      save(()=>db.doc("settings/automation").set({enabled: next, changedAt:new Date().toISOString()}),
+        next ? "Automation turned on" : "Automation turned off - no background Anthropic calls");
+    }
     else if(act==="copy") copyOrder();
     else if(act==="closeCopy"){ $("copyScrim").hidden = true; $("copySheet").hidden = true; }
     else if(act==="push") pushBack(id, +b.dataset.n);
@@ -842,6 +860,7 @@ h2{font-size:1.15rem;font-weight:700}
     });
     db.doc("plan/current").onSnapshot(s=>{ S.plan = s.exists ? s.data() : null; render(); }, ()=>{});
     db.doc("plan/draft").onSnapshot(s=>{ S.dplan = s.exists ? s.data() : null; render(); }, ()=>{});
+    db.doc("settings/automation").onSnapshot(s=>{ S.automation = s.exists ? s.data() : null; render(); }, ()=>{});
   })();
 })();
 </script>

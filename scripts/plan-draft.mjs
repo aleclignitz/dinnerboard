@@ -1,12 +1,16 @@
 // Tuesday job: promotes a due draft into the live plan, then drafts the
 // next two weeks when the pickup date is close enough. Ported from
 // automation/1-plan-draft-task.md, minus the Gmail order-check step
-// (STEP 1B) and the recipe-dataset lookup, both left for later.
+// (STEP 1B). Cook-night recipes come from the Supabase recipes dataset via
+// a deterministic picker + Claude review (lib/recipePicker.mjs), falling
+// back to free-form generation only if nothing in the dataset fits.
 import { getSupabase, getDoc, getCollection, setDoc, deleteDoc } from "./lib/supabaseClient.mjs";
-import { askClaude } from "./lib/claude.mjs";
+import { askClaude, parseClaudeJson } from "./lib/claude.mjs";
+import { selectRecipeForMeal, generateFreeformRecipe } from "./lib/recipePicker.mjs";
 
 const TIME_ZONE = process.env.PLAN_TIME_ZONE || "America/Chicago";
 const GUIDELINES = process.env.PLAN_GUIDELINES || "";
+const MAX_COOK_MINUTES = Number(process.env.PLAN_MAX_COOK_MINUTES || 45);
 
 function todayInZone() {
   return new Date().toLocaleDateString("en-CA", { timeZone: TIME_ZONE }); // YYYY-MM-DD
@@ -24,6 +28,15 @@ function latestSundayOnOrBefore(dateStr) {
 
 async function main() {
   const supabase = getSupabase();
+
+  // Off by default: the board's "Turn on automation" button must set
+  // enabled:true before any processing or Anthropic calls happen here.
+  const automation = await getDoc(supabase, "settings/automation");
+  if (!automation || automation.enabled !== true) {
+    console.log("Automation is off (default). Turn it on from the board to enable weekly plan drafts. Skipping.");
+    return;
+  }
+
   const today = todayInZone();
   const notes = [];
 
@@ -84,7 +97,7 @@ async function main() {
   const current = (await getDoc(supabase, "plan/current")) || {};
   const guidelines = current.guidelines || GUIDELINES;
 
-  // STEP 4-6: ask Claude to draft the plan as JSON
+  // STEP 4-6: ask Claude to draft the plan skeleton as JSON
   const system = "You write a two-week household dinner plan as strict JSON only, no prose, no markdown fences.";
   const prompt = `Household guidelines: ${guidelines}
 Plan range: ${newStart} to ${newEnd}. Pickup day: ${pickup}.
@@ -95,18 +108,54 @@ Freezer on hand (use first): ${JSON.stringify(freezer)}
 Staples (skip "have" items from the grocery list): ${JSON.stringify(staples)}
 Quick-add groceries already requested: ${JSON.stringify(grocery)}
 
-Write an original recipe for every cook night and any flex night with a specific dish. Week 2 meals using a protein bought at pickup need a "thaw" field describing what to move from freezer to fridge the night before. Use safe internal temperatures (poultry 165F, fish 145F).
+For every "cook" night, set "protein" to one of chicken, beef, pork, turkey, lamb, fish, vegetarian - rotate these across the two weeks per the guidelines (recipes themselves are picked separately from a fixed dataset, so do not write ingredients/steps for cook nights). For any "flex" night with a specific dish in mind, write a full "recipe" as shown below instead. "leftovers" nights need neither. Week 2 meals using a protein bought at pickup need a "thaw" field describing what to move from freezer to fridge the night before.
 
 Return JSON with exactly this shape:
 {
-  "meals": [{"date":"YYYY-MM-DD","kind":"cook|leftovers|flex","title":"","details":"","from":"","thaw":"","recipe":{"serves":0,"time":0,"oven":"","ingredients":[""],"steps":[""],"tip":""}}],
+  "meals": [{"date":"YYYY-MM-DD","kind":"cook|leftovers|flex","details":"","from":"","thaw":"","protein":"","recipe":null}],
   "summary": "1-2 sentences: what's new and what's returning",
   "prep": "Freeze on arrival: ...",
   "groceries": [{"section":"Proteins, use fresh (week 1)","items":[""]}]
 }`;
 
   const raw = await askClaude({ system, prompt, maxTokens: 8000 });
-  const plan = JSON.parse(raw);
+  const plan = parseClaudeJson(raw);
+
+  // STEP 5b: fill in a real recipe for every cook night, from the Supabase
+  // recipes dataset when possible (deterministic pick + Claude review),
+  // falling back to free-form generation only if nothing fits.
+  const context = { history: history.slice(-30), freezer, staples };
+  const usedRecipeIds = history.map((m) => m.sourceRecipeId).filter(Boolean);
+  for (const meal of plan.meals) {
+    if (meal.kind !== "cook") {
+      delete meal.protein;
+      continue;
+    }
+    const selection = await selectRecipeForMeal(supabase, {
+      date: meal.date,
+      kind: meal.kind,
+      protein: meal.protein,
+      maxTime: MAX_COOK_MINUTES,
+      guidelines,
+      context,
+      excludeIds: usedRecipeIds
+    });
+    if (selection) {
+      meal.title = selection.title;
+      meal.sourceRecipeId = selection.sourceRecipeId;
+      meal.details = selection.details || meal.details || "";
+      meal.thaw = selection.thaw || meal.thaw || "";
+      meal.recipe = selection.recipe;
+      usedRecipeIds.push(selection.sourceRecipeId);
+    } else {
+      const fallback = await generateFreeformRecipe({ date: meal.date, kind: meal.kind, guidelines, context });
+      meal.title = fallback.title;
+      meal.details = fallback.details || meal.details || "";
+      meal.thaw = fallback.thaw || meal.thaw || "";
+      meal.recipe = fallback.recipe;
+    }
+    delete meal.protein;
+  }
 
   // STEP 6: save the draft
   const dayStamp = newStart.replace(/-/g, "");

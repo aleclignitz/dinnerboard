@@ -4,13 +4,53 @@
 // Muse (or any agent) picks the list up via the board's Copy list button
 // for now instead of a Drive doc.
 import { getSupabase, getDoc, getCollection, setDoc } from "./lib/supabaseClient.mjs";
-import { askClaude } from "./lib/claude.mjs";
+import { selectRecipeForMeal, generateFreeformRecipe } from "./lib/recipePicker.mjs";
+import { askClaude, parseClaudeJson } from "./lib/claude.mjs";
 
 const STORE = process.env.STORE_NAME || "Walmart pickup";
 const SUBSTITUTION_RULES = process.env.SUBSTITUTION_RULES || "Store-brand substitutions are fine.";
+const MAX_COOK_MINUTES = Number(process.env.PLAN_MAX_COOK_MINUTES || 45);
+// "pickup" or "delivery" - delivery by default
+const ORDER_METHOD = (process.env.ORDER_METHOD || "delivery").toLowerCase();
+
+// Word matching can't tell "2 lb ground beef" needs buying despite a freezer
+// entry reading "Ground beef, 1 lb", so Claude reconciles quantities/spices
+// instead. Falls back to the raw, unfiltered list if the call fails.
+async function trimIngredientsAgainstPantry({ ingredients, staples, freezer }) {
+  if (!ingredients.length) return ingredients;
+  const system = "You trim a merged recipe ingredient list down to what still needs to be bought, and output ONLY valid JSON, no prose.";
+  const prompt = `Raw recipe ingredients for this week's meals (combined across recipes, may include duplicates/overlaps - merge those into one line):
+${JSON.stringify(ingredients)}
+
+Pantry staples, with status ("have" = stocked, "low"/"unknown" = buy it): ${JSON.stringify(staples)}
+
+Freezer inventory on hand, with quantities: ${JSON.stringify(freezer)}
+
+Drop any ingredient fully covered by a "have" staple (e.g. skip salt, pepper, common spices, cooking oil, soy sauce) or by freezer stock that covers the amount needed this week. If multiple recipes need more of something than the freezer has (e.g. two recipes need 1 lb ground beef each but the freezer only has 1 lb), keep a line for the remaining amount instead of dropping it entirely. Merge duplicate/overlapping ingredients into one line with a combined quantity. Do not invent items that weren't in the raw list, and do not drop anything you're unsure about - buying a small duplicate is fine, missing an ingredient is not.
+
+Return JSON with exactly this shape:
+{"items": ["item 1", "item 2"]}`;
+  try {
+    const raw = await askClaude({ system, prompt, maxTokens: 1500 });
+    const parsed = parseClaudeJson(raw);
+    return Array.isArray(parsed.items) && parsed.items.length ? parsed.items : ingredients;
+  } catch (err) {
+    console.error("Pantry trim failed, falling back to the unfiltered ingredient list:", err);
+    return ingredients;
+  }
+}
 
 async function main() {
   const supabase = getSupabase();
+
+  // Off by default: the board's "Turn on automation" button must set
+  // enabled:true before any processing or Anthropic calls happen here.
+  const automation = await getDoc(supabase, "settings/automation");
+  if (!automation || automation.enabled !== true) {
+    console.log("Automation is off (default). Turn it on from the board to enable the weekly grocery list. Skipping.");
+    return;
+  }
+
   const current = (await getDoc(supabase, "plan/current")) || {};
   const draftPlan = await getDoc(supabase, "plan/draft");
 
@@ -23,29 +63,47 @@ async function main() {
   // STEP 2: replace any meal marked swapOut
   const draftMeals = await getCollection(supabase, "draft");
   const toSwap = draftMeals.filter((m) => m.swapOut);
+  const history = await getCollection(supabase, "history");
+  const freezer = await getCollection(supabase, "freezer");
+  const usedRecipeIds = [...draftMeals, ...history].map((m) => m.sourceRecipeId).filter(Boolean);
   for (const m of toSwap) {
     const notes = (await getCollection(supabase, "notes")).filter((n) => n.meal === m.id);
     const ideas = await getCollection(supabase, "ideas");
-    const prompt = `Replace this meal with a different ${m.kind} meal for ${m.date}, following these guidelines: ${current.guidelines || ""}.
-Notes on the meal being replaced: ${JSON.stringify(notes)}
-Open requests: ${JSON.stringify(ideas)}
-Use safe internal temperatures (poultry 165F, fish 145F).
-Return JSON only: {"title":"","details":"","recipe":{"serves":0,"time":0,"oven":"","ingredients":[""],"steps":[""],"tip":""}}`;
-    const raw = await askClaude({ system: "Output ONLY valid JSON, no prose.", prompt, maxTokens: 2000 });
-    const replacement = JSON.parse(raw);
+    const context = { history: [...history.slice(-30), ...notes], freezer, ideas };
+
+    let replacement;
+    if (m.kind === "cook") {
+      const selection = await selectRecipeForMeal(supabase, {
+        date: m.date,
+        kind: m.kind,
+        maxTime: MAX_COOK_MINUTES,
+        guidelines: current.guidelines || "",
+        context,
+        excludeIds: usedRecipeIds
+      });
+      if (selection) {
+        replacement = selection;
+        usedRecipeIds.push(selection.sourceRecipeId);
+      }
+    }
+    if (!replacement) {
+      replacement = await generateFreeformRecipe({ date: m.date, kind: m.kind, guidelines: current.guidelines || "", context });
+    }
     await setDoc(supabase, `draft/${m.id}`, { ...m, ...replacement, swapOut: false });
   }
 
-  // STEP 3: build the order list (naive ingredient merge - refine later)
+  // STEP 3: build the order list
   const finalMeals = await getCollection(supabase, "draft");
   const grocery = await getCollection(supabase, "grocery");
   const staples = await getCollection(supabase, "staples");
   const lowStaples = staples.filter((s) => s.status === "low");
-  const allIngredients = finalMeals.flatMap((m) => (m.recipe && m.recipe.ingredients) || []);
+  const rawIngredients = finalMeals.flatMap((m) => (m.recipe && m.recipe.ingredients) || []);
+  const allIngredients = await trimIngredientsAgainstPantry({ ingredients: rawIngredients, staples, freezer });
   const pickupLabel = draftPlan.pickup || "this Sunday";
 
   const lines = [];
-  lines.push(`Please build a ${STORE} order for ${pickupLabel}, with an afternoon pickup (1-4 PM if available), with these items:`);
+  const timing = ORDER_METHOD === "pickup" ? ", with an afternoon pickup (1-4 PM if available)" : ", for delivery";
+  lines.push(`Please build a ${STORE} order for ${pickupLabel}${timing}, with these items:`);
   lines.push("", "Recipe ingredients:");
   allIngredients.forEach((i) => lines.push(`- ${i}`));
   if (grocery.length) {

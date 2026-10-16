@@ -21,4 +21,5 @@ jobs:
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           STORE_NAME: ${{ vars.STORE_NAME }}
+          ORDER_METHOD: ${{ vars.ORDER_METHOD }}
           SUBSTITUTION_RULES: ${{ vars.SUBSTITUTION_RULES }}
