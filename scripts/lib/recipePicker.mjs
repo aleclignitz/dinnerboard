@@ -70,6 +70,7 @@ Meal date: ${date} (${kind} night${protein ? `, ${protein}` : ""}).
 Context - recent history with ratings: ${JSON.stringify(context.history || [])}
 Freezer on hand: ${JSON.stringify(context.freezer || [])}
 Staples running low or out: ${JSON.stringify(context.staples || [])}
+Sale deals this week (consider when choosing, not mandatory): ${JSON.stringify(context.saleDeals || [])}
 
 Candidate recipes (choose the best fit, or reject all if none are a good fit):
 ${JSON.stringify(candidates.map(summarizeCandidate))}

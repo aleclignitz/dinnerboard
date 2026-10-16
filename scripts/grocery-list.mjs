@@ -1,5 +1,6 @@
-// Thursday job: finalizes any meals marked "Replace", builds one grocery
-// list, and saves it on the board behind the Copy list button. Ported from
+// Wednesday job (runs after plan-draft, same morning as fetch-weekly-ad):
+// finalizes any meals marked "Replace", builds one grocery list, and saves
+// it on the board behind the Copy list button. Ported from
 // automation/2-grocery-list-task.md, minus the Google Drive save (STEP 4) -
 // Muse (or any agent) picks the list up via the board's Copy list button
 // for now instead of a Drive doc.
@@ -12,6 +13,7 @@ const SUBSTITUTION_RULES = process.env.SUBSTITUTION_RULES || "Store-brand substi
 const MAX_COOK_MINUTES = Number(process.env.PLAN_MAX_COOK_MINUTES || 45);
 // "pickup" or "delivery" - delivery by default
 const ORDER_METHOD = (process.env.ORDER_METHOD || "delivery").toLowerCase();
+const PICKUP_WINDOW = process.env.PICKUP_WINDOW || "1-4 PM";
 
 // Word matching can't tell "2 lb ground beef" needs buying despite a freezer
 // entry reading "Ground beef, 1 lb", so Claude reconciles quantities/spices
@@ -53,6 +55,7 @@ async function main() {
 
   const current = (await getDoc(supabase, "plan/current")) || {};
   const draftPlan = await getDoc(supabase, "plan/draft");
+  const ad = await getDoc(supabase, "ads/current");
 
   // STEP 1: is a list due?
   if (!draftPlan || !["drafted", "approved"].includes(current.status)) {
@@ -69,7 +72,7 @@ async function main() {
   for (const m of toSwap) {
     const notes = (await getCollection(supabase, "notes")).filter((n) => n.meal === m.id);
     const ideas = await getCollection(supabase, "ideas");
-    const context = { history: [...history.slice(-30), ...notes], freezer, ideas };
+    const context = { history: [...history.slice(-30), ...notes], freezer, ideas, saleDeals: ad && ad.ok ? ad.deals : [] };
 
     let replacement;
     if (m.kind === "cook") {
@@ -102,7 +105,7 @@ async function main() {
   const pickupLabel = draftPlan.pickup || "this Sunday";
 
   const lines = [];
-  const timing = ORDER_METHOD === "pickup" ? ", with an afternoon pickup (1-4 PM if available)" : ", for delivery";
+  const timing = ORDER_METHOD === "pickup" ? `, with an afternoon pickup (${PICKUP_WINDOW} if available)` : ", for delivery";
   lines.push(`Please build a ${STORE} order for ${pickupLabel}${timing}, with these items:`);
   lines.push("", "Recipe ingredients:");
   allIngredients.forEach((i) => lines.push(`- ${i}`));
@@ -113,6 +116,13 @@ async function main() {
   if (lowStaples.length) {
     lines.push("", "Staples running low:");
     lowStaples.forEach((s) => lines.push(`- ${s.name}`));
+  }
+  if (ad && ad.ok && ad.coupons.length) {
+    lines.push("", "Coupons to clip (Tom Thumb weekly ad):");
+    ad.coupons.forEach((c) => lines.push(`- ${c}`));
+  }
+  if (!ad || ad.ok === false) {
+    lines.push("", "Note: this week's Tom Thumb ad could not be retrieved - no sale-based substitutions were applied.");
   }
   lines.push("", `${SUBSTITUTION_RULES} Leave the order for me to review before it's placed.`);
   const orderText = lines.join("\n");

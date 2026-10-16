@@ -5,9 +5,11 @@
   "scripts": {
     "plan-draft": "node scripts/plan-draft.mjs",
     "grocery-list": "node scripts/grocery-list.mjs",
+    "fetch-weekly-ad": "node scripts/fetch-weekly-ad.mjs",
     "load-recipes": "node scripts/load-recipes.mjs"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.45.0"
+    "@supabase/supabase-js": "^2.45.0",
+    "playwright": "^1.48.0"
   }
 }

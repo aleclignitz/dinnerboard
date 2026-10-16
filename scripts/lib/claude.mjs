@@ -11,7 +11,7 @@ export async function askClaude({ system, prompt, maxTokens = 4000 }) {
       "anthropic-version": "2023-06-01"
     },
     body: JSON.stringify({
-      model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5-20250929",
+      model: process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5",
       max_tokens: maxTokens,
       system,
       messages: [{ role: "user", content: prompt }]

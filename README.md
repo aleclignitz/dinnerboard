@@ -16,7 +16,6 @@ The original project runs entirely inside a Claude artifact (page, database, and
 ## Status: basic
 
 This is a first pass, kept intentionally simple:
-- No Tom Thumb (or other store) weekly-ad reading yet.
 - No Gmail order-check or Google Doc export - the grocery list is saved straight to the board behind **Copy list**.
 - Cook-night recipes are picked deterministically from the Supabase `recipes` dataset (see below) and reviewed/annotated by Claude, with free-form generation only as a fallback when nothing in the dataset fits. Flex nights with a specific dish are still fully Claude-written.
 
@@ -30,12 +29,13 @@ docs/                       Generated static site - what GitHub Pages actually s
 tools/build_board.py        Rebuilds docs/ from board/ after any change
 tools/import_recipes.py     Converts an nyt-cooking-parser sqlite export into a staging JSON file
 sql/schema.sql              The `documents` table + `recipes` table, Row Level Security, realtime
-scripts/plan-draft.mjs      Tuesday job: promotes a due draft, writes the next plan
-scripts/grocery-list.mjs    Thursday job: finalizes swaps, builds the grocery list
+scripts/fetch-weekly-ad.mjs  Wednesday job: scrapes the Tom Thumb weekly ad (headless Playwright), writes ads/current
+scripts/plan-draft.mjs      Wednesday job: promotes a due draft, writes the next plan (sale-biased protein picks)
+scripts/grocery-list.mjs    Wednesday job: finalizes swaps, builds the grocery list (adds coupons-to-clip)
 scripts/load-recipes.mjs    One-off job: bulk-upserts the staging JSON into Supabase's recipes table
 scripts/lib/recipePicker.mjs  Deterministic candidate picker + Claude accept/reject review + thaw instructions
 scripts/lib/                Supabase + Claude API helpers used by the jobs above
-.github/workflows/          The two scheduled GitHub Actions
+.github/workflows/          The three scheduled GitHub Actions
 ```
 
 ## Setup
@@ -45,7 +45,7 @@ scripts/lib/                Supabase + Claude API helpers used by the jobs above
 3. **Build the site**: `python tools/build_board.py` whenever `board/` changes, then commit `docs/`.
 4. **GitHub Pages**: Settings → Pages → Deploy from branch → `main` / `docs`.
 5. **GitHub Actions secrets** (Settings → Secrets and variables → Actions): `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `ANTHROPIC_API_KEY`.
-6. **GitHub Actions variables** (same screen, Variables tab): `PLAN_GUIDELINES`, `PLAN_MAX_COOK_MINUTES`, `STORE_NAME`, `ORDER_METHOD` (`pickup` or `delivery`, defaults to `delivery`), `SUBSTITUTION_RULES`.
+6. **GitHub Actions variables** (same screen, Variables tab): `PLAN_GUIDELINES`, `PLAN_MAX_COOK_MINUTES`, `STORE_NAME`, `ORDER_METHOD` (`pickup` or `delivery`, defaults to `delivery`), `PICKUP_WINDOW` (only used when `ORDER_METHOD=pickup`, defaults to `1-4 PM`), `SUBSTITUTION_RULES`, `TOM_THUMB_ZIP`, `TOM_THUMB_STORE_ADDRESS` (the exact store address string shown on tomthumb.com's store picker, used to pick the right nearby store).
 7. **Seed data**: insert your current `meals`, `staples`, `freezer`, and `plan/current` (with `guidelines`) rows into the `documents` table before the first scheduled run.
 8. **Sign in** once on the deployed board via the magic-link prompt before testing.
 9. **Test manually** first via Actions → workflow_dispatch, rather than waiting on the cron schedule.

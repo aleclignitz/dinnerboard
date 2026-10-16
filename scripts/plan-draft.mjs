@@ -1,9 +1,10 @@
-// Tuesday job: promotes a due draft into the live plan, then drafts the
-// next two weeks when the pickup date is close enough. Ported from
-// automation/1-plan-draft-task.md, minus the Gmail order-check step
-// (STEP 1B). Cook-night recipes come from the Supabase recipes dataset via
-// a deterministic picker + Claude review (lib/recipePicker.mjs), falling
-// back to free-form generation only if nothing in the dataset fits.
+// Wednesday job (runs after fetch-weekly-ad): promotes a due draft into the
+// live plan, then drafts the next two weeks when the pickup date is close
+// enough. Ported from automation/1-plan-draft-task.md, minus the Gmail
+// order-check step (STEP 1B). Cook-night recipes come from the Supabase
+// recipes dataset via a deterministic picker + Claude review
+// (lib/recipePicker.mjs), falling back to free-form generation only if
+// nothing in the dataset fits.
 import { getSupabase, getDoc, getCollection, setDoc, deleteDoc } from "./lib/supabaseClient.mjs";
 import { askClaude, parseClaudeJson } from "./lib/claude.mjs";
 import { selectRecipeForMeal, generateFreeformRecipe } from "./lib/recipePicker.mjs";
@@ -96,6 +97,10 @@ async function main() {
   const freezer = await getCollection(supabase, "freezer");
   const current = (await getDoc(supabase, "plan/current")) || {};
   const guidelines = current.guidelines || GUIDELINES;
+  const ad = await getDoc(supabase, "ads/current");
+  const saleSummary = ad && ad.ok && ad.proteinDeals && ad.proteinDeals.length
+    ? ad.proteinDeals.map((p) => `${p.protein}: ${p.items.join("; ")}`).join(" | ")
+    : "(no sale data this week)";
 
   // STEP 4-6: ask Claude to draft the plan skeleton as JSON
   const system = "You write a two-week household dinner plan as strict JSON only, no prose, no markdown fences.";
@@ -107,6 +112,7 @@ Requests to address: ${JSON.stringify(ideas)}
 Freezer on hand (use first): ${JSON.stringify(freezer)}
 Staples (skip "have" items from the grocery list): ${JSON.stringify(staples)}
 Quick-add groceries already requested: ${JSON.stringify(grocery)}
+This week's grocery sale highlights (lean toward these proteins for cook nights when they fit the guidelines and recent history, but don't force a mismatch): ${saleSummary}
 
 For every "cook" night, set "protein" to one of chicken, beef, pork, turkey, lamb, fish, vegetarian - rotate these across the two weeks per the guidelines (recipes themselves are picked separately from a fixed dataset, so do not write ingredients/steps for cook nights). For any "flex" night with a specific dish in mind, write a full "recipe" as shown below instead. "leftovers" nights need neither. Week 2 meals using a protein bought at pickup need a "thaw" field describing what to move from freezer to fridge the night before.
 

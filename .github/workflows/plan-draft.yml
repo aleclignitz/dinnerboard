@@ -1,9 +1,10 @@
-name: Tuesday plan draft
+name: Wednesday plan draft
 
 on:
   schedule:
-    # 11:50 UTC ~= 6:50 AM America/Chicago (CST). Adjust for your time zone/DST.
-    - cron: "50 11 * * 2"
+    # 12:00 UTC ~= 7:00 AM America/Chicago (CDT). Adjust for your time zone/DST.
+    # Runs an hour after the weekly-ad fetch so it can read ads/current.
+    - cron: "0 12 * * 3"
   workflow_dispatch: {}
 
 jobs:

@@ -1,9 +1,11 @@
-name: Thursday grocery list
+name: Wednesday grocery list
 
 on:
   schedule:
-    # 23:50 UTC ~= 5:50 PM America/Chicago (CST). Adjust for your time zone/DST.
-    - cron: "50 23 * * 4"
+    # 13:00 UTC ~= 8:00 AM America/Chicago (CDT). Adjust for your time zone/DST.
+    # Runs an hour after plan-draft, leaving the rest of Wednesday to review
+    # and place the order before the midnight cutoff.
+    - cron: "0 13 * * 3"
   workflow_dispatch: {}
 
 jobs:
@@ -22,4 +24,5 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           STORE_NAME: ${{ vars.STORE_NAME }}
           ORDER_METHOD: ${{ vars.ORDER_METHOD }}
+          PICKUP_WINDOW: ${{ vars.PICKUP_WINDOW }}
           SUBSTITUTION_RULES: ${{ vars.SUBSTITUTION_RULES }}
