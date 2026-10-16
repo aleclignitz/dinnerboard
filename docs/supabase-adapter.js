@@ -16,7 +16,7 @@
 
   var client = window.supabase.createClient(
     window.SUPABASE_CONFIG.url,
-    window.SUPABASE_CONFIG.anonKey
+    window.SUPABASE_CONFIG.publishableKey
   );
 
   function freeze(o) { return o === undefined ? o : JSON.parse(JSON.stringify(o)); }
