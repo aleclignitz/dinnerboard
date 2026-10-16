@@ -129,6 +129,7 @@
   // The board only loads data once window.claude is in place, so block
   // rendering behind a magic-link sign-in until there's a session.
   function showSignIn() {
+    if (!document.body) { document.addEventListener("DOMContentLoaded", showSignIn, { once: true }); return; }
     var bar = document.createElement("div");
     bar.id = "sb-signin";
     bar.style.cssText = "position:fixed;inset:0;background:#FBF4EA;z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;font-family:system-ui,sans-serif";
