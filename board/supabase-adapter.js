@@ -1,4 +1,4 @@
-*
+/*
  * Supabase adapter for Supper Board.
  *
  * The board (board/supper-board.html) only ever calls
@@ -165,6 +165,14 @@
     if (!res.data.session) showSignIn();
   });
   client.auth.onAuthStateChange(function (event, session) {
-    if (session) { var bar = document.getElementById("sb-signin"); if (bar) bar.remove(); }
+    if (!session) return;
+    var bar = document.getElementById("sb-signin");
+    if (bar) {
+      bar.remove();
+      // Sign-in that happens without a page navigation (password sign-in) leaves
+      // the board's data subscriptions stuck on their earlier unauthenticated,
+      // RLS-empty fetch - reload once so they re-run with the real session.
+      if (event === "SIGNED_IN") location.reload();
+    }
   });
 })();
