@@ -7,13 +7,13 @@
 import { getSupabase, getDoc, getCollection, setDoc } from "./lib/supabaseClient.mjs";
 import { selectRecipeForMeal, generateFreeformRecipe } from "./lib/recipePicker.mjs";
 import { askClaude, parseClaudeJson } from "./lib/claude.mjs";
+import { loadSettings } from "./lib/settings.mjs";
+import { scheduledWindowOpen } from "./lib/planWindow.mjs";
 
-const STORE = process.env.STORE_NAME || "Walmart pickup";
-const SUBSTITUTION_RULES = process.env.SUBSTITUTION_RULES || "Store-brand substitutions are fine.";
-const MAX_COOK_MINUTES = Number(process.env.PLAN_MAX_COOK_MINUTES || 45);
-// "pickup" or "delivery" - delivery by default
-const ORDER_METHOD = (process.env.ORDER_METHOD || "delivery").toLowerCase();
-const PICKUP_WINDOW = process.env.PICKUP_WINDOW || "1-4 PM";
+// Filled from board Settings (falling back to env vars) once main() starts.
+let STORE, SUBSTITUTION_RULES, MAX_COOK_MINUTES, ORDER_METHOD, PICKUP_WINDOW, SETTINGS_GUIDELINES;
+
+
 
 // Word matching can't tell "2 lb ground beef" needs buying despite a freezer
 // entry reading "Ground beef, 1 lb", so Claude reconciles quantities/spices
@@ -43,6 +43,12 @@ Return JSON with exactly this shape:
 }
 
 async function main() {
+  const scheduled = process.env.GITHUB_EVENT_NAME === "schedule";
+  // Scheduled runs fire twice (CDT and CST); manual runs always go.
+  if (scheduled && !scheduledWindowOpen()) {
+    console.log("Scheduled run outside the 11 PM Chicago window (DST twin). Skipping.");
+    return;
+  }
   const supabase = getSupabase();
 
   // Off by default: the board's "Turn on automation" button must set
@@ -53,12 +59,22 @@ async function main() {
     return;
   }
 
+  const settings = await loadSettings(supabase);
+  STORE = settings.storeName;
+  SUBSTITUTION_RULES = settings.substitutionRules;
+  MAX_COOK_MINUTES = settings.maxCookMinutes;
+  ORDER_METHOD = settings.orderMethod; // "pickup" or "delivery"
+  PICKUP_WINDOW = settings.pickupWindow;
+  SETTINGS_GUIDELINES = settings.planGuidelines;
+
   const current = (await getDoc(supabase, "plan/current")) || {};
   const draftPlan = await getDoc(supabase, "plan/draft");
   const ad = await getDoc(supabase, "ads/current");
 
   // STEP 1: is a list due?
-  if (!draftPlan || !["drafted", "approved"].includes(current.status)) {
+  // Scheduled runs only build once (list_ready means done); a manual run may rebuild.
+  const buildable = scheduled ? ["drafted", "approved"] : ["drafted", "approved", "list_ready"];
+  if (!draftPlan || !buildable.includes(current.status)) {
     console.log("No list due this week.");
     return;
   }
@@ -80,7 +96,7 @@ async function main() {
         date: m.date,
         kind: m.kind,
         maxTime: MAX_COOK_MINUTES,
-        guidelines: current.guidelines || "",
+        guidelines: SETTINGS_GUIDELINES || current.guidelines || "",
         context,
         excludeIds: usedRecipeIds
       });
@@ -90,7 +106,7 @@ async function main() {
       }
     }
     if (!replacement) {
-      replacement = await generateFreeformRecipe({ date: m.date, kind: m.kind, guidelines: current.guidelines || "", context });
+      replacement = await generateFreeformRecipe({ date: m.date, kind: m.kind, guidelines: SETTINGS_GUIDELINES || current.guidelines || "", context });
     }
     await setDoc(supabase, `draft/${m.id}`, { ...m, ...replacement, swapOut: false });
   }
@@ -102,7 +118,7 @@ async function main() {
   const lowStaples = staples.filter((s) => s.status === "low");
   const rawIngredients = finalMeals.flatMap((m) => (m.recipe && m.recipe.ingredients) || []);
   const allIngredients = await trimIngredientsAgainstPantry({ ingredients: rawIngredients, staples, freezer });
-  const pickupLabel = draftPlan.pickup || "this Sunday";
+  const pickupLabel = draftPlan.pickup || "tomorrow";
 
   const lines = [];
   const timing = ORDER_METHOD === "pickup" ? `, with an afternoon pickup (${PICKUP_WINDOW} if available)` : ", for delivery";

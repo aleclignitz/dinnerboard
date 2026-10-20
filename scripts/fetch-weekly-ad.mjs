@@ -21,10 +21,11 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { getSupabase, getDoc, setDoc } from "./lib/supabaseClient.mjs";
 import { askClaude, parseClaudeJson } from "./lib/claude.mjs";
+import { loadSettings } from "./lib/settings.mjs";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const AD_URL = "https://www.tomthumb.com/weeklyad";
-const STORE_ADDRESS = process.env.TOM_THUMB_STORE_ADDRESS || "6333 E Mockingbird Ln";
+let STORE_ADDRESS = process.env.TOM_THUMB_STORE_ADDRESS || "6333 E Mockingbird Ln"; // overridden by board Settings in main()
 const MIN_DEALS = 20;
 const FETCH_ATTEMPTS = 4;
 
@@ -183,6 +184,8 @@ async function main() {
     console.log("Automation is off (default). Skipping weekly ad fetch.");
     return;
   }
+
+  STORE_ADDRESS = (await loadSettings(supabase)).storeAddress;
 
   let result;
   try {

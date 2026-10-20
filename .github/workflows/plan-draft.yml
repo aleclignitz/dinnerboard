@@ -5,6 +5,9 @@ on:
     # 12:00 UTC ~= 7:00 AM America/Chicago (CDT). Adjust for your time zone/DST.
     # Runs an hour after the weekly-ad fetch so it can read ads/current.
     - cron: "0 12 * * 3"
+    # Thursday and Friday: no new draft, just promote the week that started
+    # (Thursday is skipped while the order list is still waiting to be placed).
+    - cron: "0 12 * * 4,5"
   workflow_dispatch: {}
 
 jobs:

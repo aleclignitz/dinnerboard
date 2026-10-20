@@ -6,6 +6,8 @@
     "plan-draft": "node scripts/plan-draft.mjs",
     "grocery-list": "node scripts/grocery-list.mjs",
     "fetch-weekly-ad": "node scripts/fetch-weekly-ad.mjs",
+    "fetch-flipp-ad": "node scripts/fetch-flipp-ad.mjs",
+    "test": "node --test test/*.test.mjs",
     "capture-tomthumb-session": "node scripts/capture-tomthumb-session.mjs",
     "load-recipes": "node scripts/load-recipes.mjs"
   },

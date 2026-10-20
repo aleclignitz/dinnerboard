@@ -109,6 +109,38 @@
     };
   }
 
+  // Extras beyond the db/user shim, used by the Settings tab.
+  window.dinnerboard = {
+    recipeCount: async function () {
+      var res = await client.from("recipes").select("id", { count: "exact", head: true });
+      if (res.error) throw res.error;
+      return res.count || 0;
+    },
+    // Asks the dispatch-workflow edge function to start an allow-listed workflow.
+    startWorkflow: async function (name) {
+      var res = await client.functions.invoke("dispatch-workflow", { body: { workflow: name } });
+      if (res.error) throw res.error;
+      return res.data;
+    },
+    // Removes every planned (current + next) meal. History and ratings are kept.
+    clearPlan: async function () {
+      var cols = ["meals", "draft"];
+      for (var i = 0; i < cols.length; i++) {
+        var del = await client.from("documents").delete().like("path", cols[i] + "/%");
+        if (del.error) throw del.error;
+      }
+      var d = await client.from("documents").delete().eq("path", "plan/draft");
+      if (d.error) throw d.error;
+      var cur = await fetchRow("plan/current");
+      if (cur !== undefined) {
+        var next = freeze(cur);
+        next.status = "active"; next.pickup = ""; next.statusNote = ""; delete next.start; delete next.end;
+        var up = await client.from("documents").update({ data: next, updated_at: new Date().toISOString() }).eq("path", "plan/current");
+        if (up.error) throw up.error;
+      }
+    }
+  };
+
   window.claude = {
     use: async function (name) {
       if (name === "db") return { doc: docRef, collection: colRef };

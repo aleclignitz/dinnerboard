@@ -2,10 +2,12 @@ name: Wednesday grocery list
 
 on:
   schedule:
-    # 13:00 UTC ~= 8:00 AM America/Chicago (CDT). Adjust for your time zone/DST.
-    # Runs an hour after plan-draft, leaving the rest of Wednesday to review
-    # and place the order before the midnight cutoff.
-    - cron: "0 13 * * 3"
+    # Builds the list at ~11:45 PM Wednesday America/Chicago, leaving the whole
+    # day to review the plan. Cron is UTC-only, so two runs cover CDT and CST;
+    # scripts/grocery-list.mjs skips whichever one is outside the 11 PM hour.
+    - cron: "45 4 * * 4"
+    - cron: "45 5 * * 4"
+  # Also started by the board's "Confirm plan & build list now" button.
   workflow_dispatch: {}
 
 jobs:
@@ -26,3 +28,4 @@ jobs:
           ORDER_METHOD: ${{ vars.ORDER_METHOD }}
           PICKUP_WINDOW: ${{ vars.PICKUP_WINDOW }}
           SUBSTITUTION_RULES: ${{ vars.SUBSTITUTION_RULES }}
+          PLAN_TIME_ZONE: America/Chicago

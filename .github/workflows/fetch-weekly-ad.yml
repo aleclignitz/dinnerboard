@@ -15,8 +15,25 @@ jobs:
         with:
           node-version: "22"
       - run: npm install
-      - run: npx playwright install --with-deps chromium
-      - run: node scripts/fetch-weekly-ad.mjs
+      # Primary: Flipp JSON (no browser, no session state, no Claude).
+      - name: Fetch from Flipp
+        id: flipp
+        continue-on-error: true
+        run: node scripts/fetch-flipp-ad.mjs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          TOM_THUMB_ZIP: ${{ vars.TOM_THUMB_ZIP || '75214' }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}      - name: Flipp failed, falling back to Playwright
+        if: steps.flipp.outcome == 'failure'
+        run: echo "::warning::Flipp fetch failed; using the Playwright scraper as fallback."
+      # Fallback: only runs (and only installs the browser) if Flipp failed.
+      - name: Install Playwright browser
+        if: steps.flipp.outcome == 'failure'
+        run: npx playwright install --with-deps chromium
+      - name: Fetch with Playwright (fallback)
+        if: steps.flipp.outcome == 'failure'
+        run: node scripts/fetch-weekly-ad.mjs
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}

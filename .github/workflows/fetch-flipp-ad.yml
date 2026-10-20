@@ -1,0 +1,30 @@
+name: Fetch weekly ad (Flipp, validation)
+
+# Manual only until the Flipp source has been validated against the live ad.
+# The scheduled Playwright workflow (fetch-weekly-ad.yml) remains the production path.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (do not write to Supabase)"
+        type: boolean
+        default: true
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --omit=dev --ignore-scripts || npm install --omit=dev --ignore-scripts
+      - run: npm test
+      - name: Fetch from Flipp
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          TOM_THUMB_ZIP: ${{ vars.TOM_THUMB_ZIP || '75214' }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}          FLIPP_DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+        run: node scripts/fetch-flipp-ad.mjs

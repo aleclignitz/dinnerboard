@@ -36,3 +36,8 @@ shell_tail = "\n</body>\n</html>\n"
 out = ROOT / "docs" / "index.html"
 out.write_text(shell_head + board + shell_tail, encoding="utf-8")
 print(f"Wrote {out.relative_to(ROOT)}")
+
+# index.html loads these two by relative path, so docs/ needs current copies.
+for name in ("config.js", "supabase-adapter.js"):
+    (ROOT / "docs" / name).write_text((ROOT / "board" / name).read_text(encoding="utf-8"), encoding="utf-8")
+    print(f"Copied board/{name} -> docs/{name}")

@@ -3,3 +3,4 @@ node_modules/
 .recipes-staging.json
 scripts/_tomthumb-storageState.json
 scripts/_debug*
+flyer.pdf

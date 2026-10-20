@@ -1,6 +1,6 @@
-// Wednesday job (runs after fetch-weekly-ad): promotes a due draft into the
-// live plan, then drafts the next two weeks when the pickup date is close
-// enough. Ported from automation/1-plan-draft-task.md, minus the Gmail
+// Wednesday job (runs after fetch-weekly-ad; also Thursday/Friday, to promote): promotes
+// a due draft into the live plan, then drafts the next week (Thursday dinner
+// through Wednesday) the day before it starts. Ported from automation/1-plan-draft-task.md, minus the Gmail
 // order-check step (STEP 1B). Cook-night recipes come from the Supabase
 // recipes dataset via a deterministic picker + Claude review
 // (lib/recipePicker.mjs), falling back to free-form generation only if
@@ -8,23 +8,13 @@
 import { getSupabase, getDoc, getCollection, setDoc, deleteDoc } from "./lib/supabaseClient.mjs";
 import { askClaude, parseClaudeJson } from "./lib/claude.mjs";
 import { selectRecipeForMeal, generateFreeformRecipe } from "./lib/recipePicker.mjs";
+import { loadSettings } from "./lib/settings.mjs";
+import { addDays, nextPlanWindow, meetsWindow, PLAN_DAYS, RHYTHM } from "./lib/planWindow.mjs";
 
 const TIME_ZONE = process.env.PLAN_TIME_ZONE || "America/Chicago";
-const GUIDELINES = process.env.PLAN_GUIDELINES || "";
-const MAX_COOK_MINUTES = Number(process.env.PLAN_MAX_COOK_MINUTES || 45);
 
 function todayInZone() {
   return new Date().toLocaleDateString("en-CA", { timeZone: TIME_ZONE }); // YYYY-MM-DD
-}
-function addDays(dateStr, days) {
-  const d = new Date(dateStr + "T00:00:00");
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-function latestSundayOnOrBefore(dateStr) {
-  const d = new Date(dateStr + "T00:00:00");
-  d.setDate(d.getDate() - d.getDay());
-  return d.toISOString().slice(0, 10);
 }
 
 async function main() {
@@ -38,6 +28,10 @@ async function main() {
     return;
   }
 
+  const settings = await loadSettings(supabase);
+  const GUIDELINES = settings.planGuidelines;
+  const MAX_COOK_MINUTES = settings.maxCookMinutes;
+
   const today = todayInZone();
   const notes = [];
 
@@ -45,7 +39,10 @@ async function main() {
   let draftMeals = await getCollection(supabase, "draft");
   if (draftMeals.length) {
     const earliest = draftMeals.map((m) => m.date).sort()[0];
-    if (earliest <= today) {
+    const status = ((await getDoc(supabase, "plan/current")) || {}).status;
+    // On the start day, keep the plan/draft doc while the order list is still waiting to be copied or placed.
+    const orderOutstanding = ["list_ready", "cart_built"].includes(status) && earliest >= today;
+    if (earliest <= today && !orderOutstanding) {
       const meals = await getCollection(supabase, "meals");
       for (const m of meals) {
         const { id, ...rest } = m;
@@ -79,15 +76,12 @@ async function main() {
     return;
   }
   const meals = await getCollection(supabase, "meals");
-  const planEnd = meals.length ? meals.map((m) => m.date).sort().slice(-1)[0] : today;
-  const newStart = addDays(planEnd, 1);
-  const pickup = latestSundayOnOrBefore(newStart);
-  const daysUntilPickup = (new Date(pickup) - new Date(today)) / 86400000;
-  if (!(daysUntilPickup <= 7 && daysUntilPickup >= -2)) {
-    console.log(`Next draft not due until closer to ${pickup}.`, notes.join(" "));
+  // With no plan yet, the board Settings start date (if still in the future) is the first day to plan.
+  const { start: newStart, end: newEnd, pickup, due } = nextPlanWindow({ today, mealDates: meals.map((m) => m.date), startDate: settings.startDate });
+  if (!due) {
+    console.log(`Next draft not due until the day before ${newStart}.`, notes.join(" "));
     return;
   }
-  const newEnd = addDays(pickup, 14);
 
   // STEP 3: gather context
   const history = await getCollection(supabase, "history");
@@ -96,17 +90,17 @@ async function main() {
   const staples = await getCollection(supabase, "staples");
   const freezer = await getCollection(supabase, "freezer");
   const current = (await getDoc(supabase, "plan/current")) || {};
-  const guidelines = current.guidelines || GUIDELINES;
+  const guidelines = GUIDELINES || current.guidelines || "";
   const ad = await getDoc(supabase, "ads/current");
   const saleSummary = ad && ad.ok && ad.proteinDeals && ad.proteinDeals.length
     ? ad.proteinDeals.map((p) => `${p.protein}: ${p.items.join("; ")}`).join(" | ")
     : "(no sale data this week)";
 
   // STEP 4-6: ask Claude to draft the plan skeleton as JSON
-  const system = "You write a two-week household dinner plan as strict JSON only, no prose, no markdown fences.";
+  const system = "You write a one-week household dinner plan as strict JSON only, no prose, no markdown fences.";
   const prompt = `Household guidelines: ${guidelines}
-Plan range: ${newStart} to ${newEnd}. Pickup day: ${pickup}.
-Default rhythm: cook Mon/Wed/Fri, leftovers Tue/Thu/Sat, flexible Sunday.
+Plan range: ${newStart} to ${newEnd} (exactly ${PLAN_DAYS} dinners, one per date). Grocery order day: ${pickup}.
+Default rhythm: ${RHYTHM}. Fresh produce and the sale items bought this week should be used within the week.
 Recent history with ratings (bring back 4-5 star meals at most twice, never repeat 1-2 star meals): ${JSON.stringify(history.slice(-30))}
 Requests to address: ${JSON.stringify(ideas)}
 Freezer on hand (use first): ${JSON.stringify(freezer)}
@@ -114,18 +108,20 @@ Staples (skip "have" items from the grocery list): ${JSON.stringify(staples)}
 Quick-add groceries already requested: ${JSON.stringify(grocery)}
 This week's grocery sale highlights (lean toward these proteins for cook nights when they fit the guidelines and recent history, but don't force a mismatch): ${saleSummary}
 
-For every "cook" night, set "protein" to one of chicken, beef, pork, turkey, lamb, fish, vegetarian - rotate these across the two weeks per the guidelines (recipes themselves are picked separately from a fixed dataset, so do not write ingredients/steps for cook nights). For any "flex" night with a specific dish in mind, write a full "recipe" as shown below instead. "leftovers" nights need neither. Week 2 meals using a protein bought at pickup need a "thaw" field describing what to move from freezer to fridge the night before.
+For every "cook" night, set "protein" to one of chicken, beef, pork, turkey, lamb, fish, vegetarian - rotate these across the week per the guidelines (recipes themselves are picked separately from a fixed dataset, so do not write ingredients/steps for cook nights). For any "flex" night with a specific dish in mind, write a full "recipe" as shown below instead. "leftovers" nights need neither. Any meal using a frozen protein needs a "thaw" field describing what to move from freezer to fridge the night before.
 
 Return JSON with exactly this shape:
 {
   "meals": [{"date":"YYYY-MM-DD","kind":"cook|leftovers|flex","details":"","from":"","thaw":"","protein":"","recipe":null}],
   "summary": "1-2 sentences: what's new and what's returning",
-  "prep": "Freeze on arrival: ...",
-  "groceries": [{"section":"Proteins, use fresh (week 1)","items":[""]}]
+  "prep": "Freeze on arrival: ... (only what will not be used within about 3 days)",
+  "groceries": [{"section":"Proteins","items":[""]}]
 }`;
 
   const raw = await askClaude({ system, prompt, maxTokens: 8000 });
   const plan = parseClaudeJson(raw);
+  plan.meals = meetsWindow(plan.meals, newStart, newEnd);
+  if (!plan.meals.length) throw new Error(`Claude returned no meals dated ${newStart} to ${newEnd}`);
 
   // STEP 5b: fill in a real recipe for every cook night, from the Supabase
   // recipes dataset when possible (deterministic pick + Claude review),
