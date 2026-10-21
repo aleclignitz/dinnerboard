@@ -17,14 +17,25 @@ function todayInZone() {
   return new Date().toLocaleDateString("en-CA", { timeZone: TIME_ZONE }); // YYYY-MM-DD
 }
 
+// Lets the board's "Manually fetch weekly recipes from recipe box" button show progress/results.
+async function status(supabase, patch) {
+  try {
+    await setDoc(supabase, "settings/planDraft", { ...patch, updatedAt: new Date().toISOString() });
+  } catch (err) {
+    console.error("Couldn't write plan-draft status:", err.message);
+  }
+}
+
 async function main() {
   const supabase = getSupabase();
+  await status(supabase, { status: "running", message: "" });
 
   // Off by default: the board's "Turn on automation" button must set
   // enabled:true before any processing or Anthropic calls happen here.
   const automation = await getDoc(supabase, "settings/automation");
   if (!automation || automation.enabled !== true) {
     console.log("Automation is off (default). Turn it on from the board to enable weekly plan drafts. Skipping.");
+    await status(supabase, { status: "skipped", message: "Automation is off. Turn it on in Settings, then try again." });
     return;
   }
 
@@ -73,6 +84,7 @@ async function main() {
   draftMeals = await getCollection(supabase, "draft");
   if (draftMeals.length) {
     console.log("Draft already pending, nothing to do.", notes.join(" "));
+    await status(supabase, { status: "skipped", message: "A draft is already waiting for review on the Plan tab." });
     return;
   }
   const meals = await getCollection(supabase, "meals");
@@ -80,6 +92,7 @@ async function main() {
   const { start: newStart, end: newEnd, pickup, due } = nextPlanWindow({ today, mealDates: meals.map((m) => m.date), startDate: settings.startDate });
   if (!due) {
     console.log(`Next draft not due until the day before ${newStart}.`, notes.join(" "));
+    await status(supabase, { status: "skipped", message: `Next plan isn't due until the day before ${newStart}.` });
     return;
   }
 
@@ -176,9 +189,13 @@ Return JSON with exactly this shape:
   await setDoc(supabase, "plan/current", { ...current, status: "drafted", pickup });
 
   console.log(`Drafted ${plan.meals.length} meals for ${newStart} to ${newEnd}. ${notes.join(" ")}`);
+  await status(supabase, { status: "done", message: `Drafted ${plan.meals.length} meals for ${newStart} to ${newEnd}.` });
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
   console.error(err);
+  try {
+    await status(getSupabase(), { status: "error", message: err.message });
+  } catch { /* already logged above */ }
   process.exit(1);
 });

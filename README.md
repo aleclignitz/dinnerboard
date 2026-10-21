@@ -86,9 +86,8 @@ scripts/fetch-weekly-ad.mjs Fallback ad source: Playwright scraper + Claude
 scripts/capture-tomthumb-session.mjs  Manual: saves a Tom Thumb browser session for the fallback
 scripts/plan-draft.mjs      Writes the next one-week plan
 scripts/grocery-list.mjs    Finalizes swaps and builds the grocery list
-scripts/load-recipes.mjs    Optional: upserts a staged recipe dataset into Supabase
-scripts/seed-recipes.mjs    Claude-written starter recipes (started from Settings)
-supabase/functions/dispatch-workflow/  Edge function that starts seed-recipes and grocery-list for the board
+scripts/load-recipes.mjs    Loads the fixed recipe dataset into Supabase (one-time/occasional, local only)
+supabase/functions/dispatch-workflow/  Edge function that starts plan-draft and grocery-list for the board
 scripts/lib/settings.mjs   Board Settings > env var > default resolution
 scripts/lib/                flipp.mjs, recipePicker.mjs, claude.mjs, supabaseClient.mjs
 test/flipp.test.mjs         Unit tests for the Flipp source (no network)
@@ -103,14 +102,14 @@ test/flipp.test.mjs         Unit tests for the Flipp source (no network)
 4. **GitHub Pages:** Settings → Pages → Deploy from branch → `main` / `docs`.
 5. **Actions secrets** (Settings → Secrets and variables → Actions): `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `ANTHROPIC_API_KEY`, and `TOM_THUMB_STORAGE_STATE` (fallback scraper only).
 6. **Settings are on the board, not in GitHub.** Planning guidelines, cook-time limit, store, order method, pickup window, substitutions, ZIP, store address and the first-plan start date are edited from the board's **Settings** tab (see below). The optional Actions variables `PLAN_GUIDELINES`, `PLAN_MAX_COOK_MINUTES`, `STORE_NAME`, `ORDER_METHOD`, `PICKUP_WINDOW`, `SUBSTITUTION_RULES`, `TOM_THUMB_ZIP` and `TOM_THUMB_STORE_ADDRESS` still work as defaults; anything saved on the board wins.
-7. **Deploy the dispatch function** (enables the board's "Generate starter recipes" and "Confirm plan & build list now" buttons; redeploy it after pulling updates). One time, with the [Supabase CLI](https://supabase.com/docs/guides/cli):
+7. **Deploy the dispatch function** (enables the board's "Manually fetch weekly recipes from recipe box" and "Confirm plan & build list now" buttons; redeploy it after pulling updates). One time, with the [Supabase CLI](https://supabase.com/docs/guides/cli):
 
    ```
    supabase functions deploy dispatch-workflow --no-verify-jwt
    supabase secrets set GH_REPO=<your-user>/dinnerboard GH_DISPATCH_TOKEN=<token>
    ```
 
-   The token is a fine-grained GitHub personal access token limited to this repository with **Actions: Read and write**. It lives only in Supabase secrets, never in the repo or the browser. The function checks the caller's Supabase sign-in and can only start the `seed-recipes` and `grocery-list` workflows. Without it, run **Seed starter recipes** from the Actions tab instead.
+   The token is a fine-grained GitHub personal access token limited to this repository with **Actions: Read and write**. It lives only in Supabase secrets, never in the repo or the browser. The function checks the caller's Supabase sign-in and can only start the `plan-draft` and `grocery-list` workflows. Without it, run **Wednesday plan draft** from the Actions tab instead.
 8. **Sign in** once on the deployed board via the magic-link prompt.
 9. **Open the Settings tab** and follow **Get started** (below). No database seeding is needed.
 10. **Test manually** with Actions → workflow_dispatch before waiting on the schedule. The **Fetch weekly ad (Flipp, validation)** workflow defaults to a dry run that writes nothing.
@@ -119,7 +118,7 @@ test/flipp.test.mjs         Unit tests for the Flipp source (no network)
 
 The board's **Settings** tab replaces manual database seeding:
 
-1. **Add some recipes:** **Generate starter recipes** has Claude write a pool of 14 entrees, enough for several weeks of cook nights (spread across proteins, within your cook-time limit). It takes a minute or two and costs a few Anthropic calls. The button starts the `seed-recipes` workflow through the dispatch function and the tab shows progress. You can run it again for more.
+1. **Load your recipes:** the `recipes` table is a fixed, read-only dataset - Claude never writes to it. Load it once (or add more later) with `tools/import_recipes.py` + `scripts/load-recipes.mjs` (see **Recipe dataset** below). The Settings tab shows how many recipes are loaded, and **Manually fetch weekly recipes from recipe box** lets you draft this week's plan from that dataset on demand instead of waiting for the Wednesday schedule.
 2. **Pick a start date:** nothing is planned before it. Leave it blank to start tomorrow. It only affects the first plan.
 3. **Turn on automation:** off by default, so nothing runs or costs anything until you switch it on.
 

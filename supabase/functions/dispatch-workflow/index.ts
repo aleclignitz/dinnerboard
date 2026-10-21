@@ -8,7 +8,7 @@
 // Deploy with --no-verify-jwt; the user's session token is verified below.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const ALLOWED: Record<string, string> = { "seed-recipes": "seed-recipes.yml", "grocery-list": "grocery-list.yml" };
+const ALLOWED: Record<string, string> = { "plan-draft": "plan-draft.yml", "grocery-list": "grocery-list.yml" };
 
 const cors = {
   "Access-Control-Allow-Origin": "*",

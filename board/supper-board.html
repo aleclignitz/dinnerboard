@@ -438,7 +438,7 @@ h2{font-size:1.15rem;font-weight:700}
 
 <script>
 (function(){
-  const S = {meals:[],draft:[],history:[],notes:[],grocery:[],staples:[],freezer:[],ideas:[],plan:null,dplan:null,automation:null,settings:null,seed:null,recipeCount:null,loaded:{}};
+  const S = {meals:[],draft:[],history:[],notes:[],grocery:[],staples:[],freezer:[],ideas:[],plan:null,dplan:null,automation:null,settings:null,planDraft:null,recipeCount:null,loaded:{}};
   const checked = new Set(); let wakeLock = null;
   let db = null, dbState = "pending", readOnly = false, tab = "today", openId = null;
   const $ = id => document.getElementById(id);
@@ -636,8 +636,8 @@ h2{font-size:1.15rem;font-weight:700}
 
   const SET_IDS = {startDate:"setStart", planGuidelines:"setGuide", maxCookMinutes:"setMax", storeName:"setStore", orderMethod:"setOrder", pickupWindow:"setWindow", substitutionRules:"setSubs", zip:"setZip", storeAddress:"setAddr"};
   let settingsDirty = false;
-  const SEED_FRESH_MS = 20*60000;
-  const seedBusy = () => !!(S.seed && (S.seed.status==="requested"||S.seed.status==="running") && Date.now()-Date.parse(S.seed.updatedAt||0) < SEED_FRESH_MS);
+  const DRAFT_FRESH_MS = 20*60000;
+  const draftBusy = () => !!(S.planDraft && (S.planDraft.status==="requested"||S.planDraft.status==="running") && Date.now()-Date.parse(S.planDraft.updatedAt||0) < DRAFT_FRESH_MS);
 
   function renderSettings(){
     if(dbState==="none") return;
@@ -647,14 +647,14 @@ h2{font-size:1.15rem;font-weight:700}
     }
     const on = !!(S.automation && S.automation.enabled === true);
     const n = S.recipeCount, hasRecipes = n!==null && n>0, hasStart = !!(S.settings && S.settings.startDate);
-    let seedMsg = "";
-    if(seedBusy()) seedMsg = '<p>Writing recipes… this takes a minute or two. This page updates when it\'s done.</p>';
-    else if(S.seed && S.seed.status==="error") seedMsg = '<p style="color:var(--honey)">'+esc(S.seed.message||"Something went wrong.")+'</p>';
-    else if(S.seed && S.seed.status==="done" && S.seed.message) seedMsg = '<p>'+esc(S.seed.message)+'</p>';
+    let draftMsg = "";
+    if(draftBusy()) draftMsg = '<p>Pulling this week\'s recipes… this takes a minute or two. This page updates when it\'s done.</p>';
+    else if(S.planDraft && S.planDraft.status==="error") draftMsg = '<p style="color:var(--honey)">'+esc(S.planDraft.message||"Something went wrong.")+'</p>';
+    else if(S.planDraft && (S.planDraft.status==="done"||S.planDraft.status==="skipped") && S.planDraft.message) draftMsg = '<p>'+esc(S.planDraft.message)+'</p>';
     const step = (num,done,title,bodyHtml)=>'<div class="step'+(done?' done':'')+'"><span class="n">'+(done?'✓':num)+'</span><div class="body"><b>'+title+'</b>'+bodyHtml+'</div></div>';
-    let h = step(1,hasRecipes,"Add some recipes",
-      '<p class="muted">'+(hasRecipes ? n+' recipes are ready for planning. You can add more any time.' : 'Planning picks dinners from a recipe list. Claude can write a starter set (about two weeks of dinners to choose from) in a couple of minutes.')+'</p>'+seedMsg+
-      '<div><button type="button" class="btn small'+(hasRecipes?' ghost':'')+'" data-act="seed"'+(seedBusy()?' disabled':'')+'>'+(hasRecipes?'Manually fetch weekly recipes from recipe box':'Generate starter recipes')+'</button></div>');
+    let h = step(1,hasRecipes,"Recipes",
+      '<p class="muted">'+(hasRecipes ? n+' recipes are loaded from the recipe box and ready for planning.' : 'No recipes found yet. Load your recipe dataset with scripts/load-recipes.mjs (see the README), then refresh this page.')+'</p>'+draftMsg+
+      '<div><button type="button" class="btn small ghost" data-act="manualDraft"'+(draftBusy()?' disabled':'')+'>Manually fetch weekly recipes from recipe box</button></div>');
     h += step(2,hasStart,"Pick a start date",'<p class="muted">'+(hasStart ? 'The first plan starts on '+esc(fmt(S.settings.startDate,{weekday:"long",month:"long",day:"numeric"}))+'.' : 'Choose when planning begins in the settings below, then Save. If you skip this, the first plan starts tomorrow.')+'</p>');
     h += step(3,on,"Turn on automation",'<p class="muted">'+(on ? 'Automation is on. Weekly jobs run on Wednesday mornings, planning Thursday through the following Wednesday. They only call Anthropic while this is on.' : 'Off by default so nothing runs (or costs anything) until you are ready.')+'</p>'+
       '<div><button type="button" class="btn small'+(on?' ghost':'')+'" data-act="automation">'+(on?'Turn off automation':'Turn on automation')+'</button></div>');
@@ -682,16 +682,16 @@ h2{font-size:1.15rem;font-weight:700}
     }, "Settings saved");
   }
 
-  async function startSeed(){
+  async function startManualDraft(){
     if(!db || readOnly){ toast("You can view this plan but not change it."); return; }
-    if(seedBusy()){ toast("Already writing recipes."); return; }
+    if(draftBusy()){ toast("Already pulling recipes."); return; }
     try{
-      await db.doc("settings/seed").set({status:"requested", message:"", updatedAt:new Date().toISOString()});
-      await window.dinnerboard.startWorkflow("seed-recipes");
-      toast("Writing your starter recipes…");
+      await db.doc("settings/planDraft").set({status:"requested", message:"", updatedAt:new Date().toISOString()});
+      await window.dinnerboard.startWorkflow("plan-draft");
+      toast("Pulling this week's recipes…");
     }catch(e){
-      await db.doc("settings/seed").set({status:"error", message:"Couldn't start recipe generation. Check that the dispatch-workflow function is deployed (see the README).", updatedAt:new Date().toISOString()}).catch(()=>{});
-      toast("Couldn't start recipe generation.");
+      await db.doc("settings/planDraft").set({status:"error", message:"Couldn't start the pull. Check that the dispatch-workflow function is deployed (see the README).", updatedAt:new Date().toISOString()}).catch(()=>{});
+      toast("Couldn't start the pull.");
     }
   }
 
@@ -932,7 +932,7 @@ h2{font-size:1.15rem;font-weight:700}
       save(()=>db.doc("settings/automation").set({enabled: next, changedAt:new Date().toISOString()}),
         next ? "Automation turned on" : "Automation turned off - no background Anthropic calls");
     }
-    else if(act==="seed") startSeed();
+    else if(act==="manualDraft") startManualDraft();
     else if(act==="buildNow") buildNow();
     else if(act==="clearPlan") clearPlan();
     else if(act==="copy") copyOrder();
@@ -1031,7 +1031,7 @@ h2{font-size:1.15rem;font-weight:700}
     db.doc("plan/draft").onSnapshot(s=>{ S.dplan = s.exists ? s.data() : null; render(); }, ()=>{});
     db.doc("settings/automation").onSnapshot(s=>{ S.automation = s.exists ? s.data() : null; render(); }, ()=>{});
     db.doc("settings/app").onSnapshot(s=>{ S.settings = s.exists ? s.data() : null; render(); }, ()=>{});
-    db.doc("settings/seed").onSnapshot(s=>{ const was = S.seed && S.seed.status; S.seed = s.exists ? s.data() : null; render(); if(S.seed && S.seed.status!==was) refreshRecipeCount(); }, ()=>{});
+    db.doc("settings/planDraft").onSnapshot(s=>{ const was = S.planDraft && S.planDraft.status; S.planDraft = s.exists ? s.data() : null; render(); if(S.planDraft && S.planDraft.status!==was) refreshRecipeCount(); }, ()=>{});
     refreshRecipeCount();
   })();
 })();
