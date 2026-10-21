@@ -26,5 +26,6 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           TOM_THUMB_ZIP: ${{ vars.TOM_THUMB_ZIP || '75214' }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}          FLIPP_DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          FLIPP_DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
         run: node scripts/fetch-flipp-ad.mjs

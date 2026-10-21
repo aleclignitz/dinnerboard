@@ -287,7 +287,7 @@ h2{font-size:1.15rem;font-weight:700}
     <div id="shopStatus" class="stack" style="margin-bottom:20px" hidden></div>
     <div class="section" style="margin-top:0">
       <div class="section-head"><h2>Next order</h2><span class="count" id="nextCount"></span></div>
-      <p class="muted" style="margin:0;font-size:.92rem">Anything here goes into the next Walmart order along with the new plan's groceries.</p>
+      <p class="muted" style="margin:0;font-size:.92rem">Anything here goes into the next grocery store order along with the new plan's groceries.</p>
       <form class="addform js-add-grocery" autocomplete="off">
         <input id="addGroceryShop" type="text" placeholder="Add an item" aria-label="Item to add to the next grocery order">
         <button class="btn" type="submit">Add</button>
@@ -363,7 +363,7 @@ h2{font-size:1.15rem;font-weight:700}
         <label>Plan guidelines<small>Tastes, diet, who you're feeding. Claude reads this when planning.</small>
           <textarea id="setGuide" placeholder="e.g. Family of four, no shellfish, kid-friendly weeknights"></textarea></label>
         <label>Longest cook time, minutes<input id="setMax" type="number" min="10" max="240" step="5" placeholder="45"></label>
-        <label>Store for the grocery list<input id="setStore" type="text" placeholder="Walmart pickup"></label>
+        <label>Store for the grocery list<input id="setStore" type="text" placeholder="Grocery store pickup"></label>
         <label>Order method<select id="setOrder"><option value="delivery">Delivery</option><option value="pickup">Pickup</option></select></label>
         <label>Pickup window<small>Used only for pickup orders.</small><input id="setWindow" type="text" placeholder="1-4 PM"></label>
         <label>Substitution rules<input id="setSubs" type="text" placeholder="Store-brand substitutions are fine."></label>
@@ -487,9 +487,9 @@ h2{font-size:1.15rem;font-weight:700}
         '<div class="row">'+(where!=="plan"?'<button type="button" class="btn small ghost" data-tab="plan">Review the plan</button>':'')+'<button type="button" class="btn small" data-act="buildNow">Confirm plan & build list now</button></div></div>';
     }
     if(st==="approved") return '<div class="status"><b>Plan approved</b><span>Claude builds the grocery list at about 11:45 PM Wednesday'+(pickup?' for '+esc(pickup):'')+', or you can build it now.</span>'+note+'<div class="row"><button type="button" class="btn small" data-act="buildNow">Build the list now</button></div></div>';
-    if(st==="list_ready") return '<div class="status attn"><b>Your Walmart list is ready</b><span>Copy it and send it to Muse'+(d.orderDocUrl?', or point Muse to <a href="'+esc(d.orderDocUrl)+'" target="_blank" rel="noopener">this week\'s list in Google Drive</a>':'')+'. Once Muse has placed the order, tap I placed the order.</span>'+note+
+    if(st==="list_ready") return '<div class="status attn"><b>Your grocery store list is ready</b><span>Copy it and send it to Muse'+(d.orderDocUrl?', or point Muse to <a href="'+esc(d.orderDocUrl)+'" target="_blank" rel="noopener">this week\'s list in Google Drive</a>':'')+'. Once Muse has placed the order, tap I placed the order.</span>'+note+
       '<div class="row"><button type="button" class="btn small" data-act="copy">Copy list for Muse</button><button type="button" class="btn small ghost" data-act="ordered">I placed the order</button><button type="button" class="btn small ghost" data-act="buildNow">Rebuild list</button></div></div>';
-    if(st==="cart_built") return '<div class="status attn"><b>Your Walmart cart is ready</b><span>Open the Walmart app, check the cart'+(pickup?' and the '+esc(pickup)+' pickup time':'')+', then place the order.</span>'+note+'<div class="row"><button type="button" class="btn small" data-act="ordered">I placed the order</button></div></div>';
+    if(st==="cart_built") return '<div class="status attn"><b>Your grocery store cart is ready</b><span>Open the grocery store app, check the cart'+(pickup?' and the '+esc(pickup)+' pickup time':'')+', then place the order.</span>'+note+'<div class="row"><button type="button" class="btn small" data-act="ordered">I placed the order</button></div></div>';
     if(st==="ordered") return '<div class="status"><b>Order placed</b><span>'+(pickup?'Pickup '+esc(pickup)+'. ':'')+(d.prep?esc(d.prep):'')+'</span>'+note+'</div>';
     return note ? '<div class="status attn"><b>Heads up</b>'+note+'</div>' : "";
   }
@@ -654,7 +654,7 @@ h2{font-size:1.15rem;font-weight:700}
     const step = (num,done,title,bodyHtml)=>'<div class="step'+(done?' done':'')+'"><span class="n">'+(done?'✓':num)+'</span><div class="body"><b>'+title+'</b>'+bodyHtml+'</div></div>';
     let h = step(1,hasRecipes,"Add some recipes",
       '<p class="muted">'+(hasRecipes ? n+' recipes are ready for planning. You can add more any time.' : 'Planning picks dinners from a recipe list. Claude can write a starter set (about two weeks of dinners to choose from) in a couple of minutes.')+'</p>'+seedMsg+
-      '<div><button type="button" class="btn small'+(hasRecipes?' ghost':'')+'" data-act="seed"'+(seedBusy()?' disabled':'')+'>'+(hasRecipes?'Generate more recipes':'Generate starter recipes')+'</button></div>');
+      '<div><button type="button" class="btn small'+(hasRecipes?' ghost':'')+'" data-act="seed"'+(seedBusy()?' disabled':'')+'>'+(hasRecipes?'Manually fetch weekly recipes from recipe box':'Generate starter recipes')+'</button></div>');
     h += step(2,hasStart,"Pick a start date",'<p class="muted">'+(hasStart ? 'The first plan starts on '+esc(fmt(S.settings.startDate,{weekday:"long",month:"long",day:"numeric"}))+'.' : 'Choose when planning begins in the settings below, then Save. If you skip this, the first plan starts tomorrow.')+'</p>');
     h += step(3,on,"Turn on automation",'<p class="muted">'+(on ? 'Automation is on. Weekly jobs run on Wednesday mornings, planning Thursday through the following Wednesday. They only call Anthropic while this is on.' : 'Off by default so nothing runs (or costs anything) until you are ready.')+'</p>'+
       '<div><button type="button" class="btn small'+(on?' ghost':'')+'" data-act="automation">'+(on?'Turn off automation':'Turn on automation')+'</button></div>');
@@ -750,12 +750,13 @@ h2{font-size:1.15rem;font-weight:700}
       '<div class="stack" style="gap:6px"><span class="eyebrow">'+esc(g)+'</span><ul class="list">'+groups[g].map(s=>
         '<li><span class="txt">'+esc(s.name)+(s.status==="unknown"?' <span class="tag">· not checked</span>':'')+'</span><span class="seg" role="group" aria-label="'+esc(s.name)+' status">'+
         '<button type="button" class="have'+(s.status==="have"?" on":"")+'" data-act="staple" data-id="'+esc(s.id)+'" data-v="have" aria-pressed="'+(s.status==="have")+'">Have</button>'+
-        '<button type="button" class="low'+(s.status==="low"?" on":"")+'" data-act="staple" data-id="'+esc(s.id)+'" data-v="low" aria-pressed="'+(s.status==="low")+'">Low</button></span></li>').join("")+'</ul></div>').join("")
+        '<button type="button" class="low'+(s.status==="low"?" on":"")+'" data-act="staple" data-id="'+esc(s.id)+'" data-v="low" aria-pressed="'+(s.status==="low")+'">Low</button></span>'+
+        '<button type="button" class="iconbtn" data-act="delStaple" data-id="'+esc(s.id)+'" aria-label="Remove '+esc(s.name)+'">'+X+'</button></li>').join("")+'</ul></div>').join("")
       : '<div class="empty">No staples listed yet.</div>';
     $("nextListWide").innerHTML = $("nextList").innerHTML;
     const fz = S.freezer.slice().sort((a,b)=>(a.at||"")<(b.at||"")?-1:1);
     $("freezerDyn").innerHTML = fz.length
-      ? '<ul class="list">'+fz.map(f=>'<li><span class="txt">'+esc(f.name)+(f.forMeal?' <span class="tag">· '+esc(f.forMeal)+'</span>':'')+'</span><button type="button" class="btn small ghost" data-act="delFreezer" data-id="'+esc(f.id)+'">Used</button></li>').join("")+'</ul>'
+      ? '<ul class="list">'+fz.map(f=>'<li><span class="txt">'+esc(f.name)+(f.forMeal?' <span class="tag">· '+esc(f.forMeal)+'</span>':'')+'</span><button type="button" class="btn small ghost" data-act="delFreezer" data-id="'+esc(f.id)+'">Used</button><button type="button" class="iconbtn" data-act="removeFreezer" data-id="'+esc(f.id)+'" aria-label="Remove '+esc(f.name)+'">'+X+'</button></li>').join("")+'</ul>'
       : '<div class="empty">Freezer list is empty.</div>';
     $("freezerWide").innerHTML = $("freezerDyn").innerHTML;
   }
@@ -957,7 +958,9 @@ h2{font-size:1.15rem;font-weight:700}
     else if(act==="delNote") save(()=>db.doc("notes/"+id).delete(), "Note deleted");
     else if(act==="delGrocery") save(()=>db.doc("grocery/"+id).delete());
     else if(act==="staple") save(()=>db.doc("staples/"+id).update({status:b.dataset.v}));
+    else if(act==="delStaple") save(()=>db.doc("staples/"+id).delete(), "Removed from staples");
     else if(act==="delFreezer") save(()=>db.doc("freezer/"+id).delete(), "Removed from the freezer list");
+    else if(act==="removeFreezer") save(()=>db.doc("freezer/"+id).delete(), "Removed from the freezer list");
     else if(act==="delIdea") save(()=>db.doc("ideas/"+id).delete());
   });
   document.addEventListener("keydown", e=>{ if(e.key==="Escape" && openId) closeSheet(); });

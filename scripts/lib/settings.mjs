@@ -9,7 +9,7 @@ export const SETTING_DEFS = {
   startDate: { env: null, default: "" },
   planGuidelines: { env: "PLAN_GUIDELINES", default: "" },
   maxCookMinutes: { env: "PLAN_MAX_COOK_MINUTES", default: 45, number: true },
-  storeName: { env: "STORE_NAME", default: "Walmart pickup" },
+  storeName: { env: "STORE_NAME", default: "Grocery store pickup" },
   orderMethod: { env: "ORDER_METHOD", default: "delivery", oneOf: ["delivery", "pickup"] },
   pickupWindow: { env: "PICKUP_WINDOW", default: "1-4 PM" },
   substitutionRules: { env: "SUBSTITUTION_RULES", default: "Store-brand substitutions are fine." },
