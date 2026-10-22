@@ -1,10 +1,12 @@
-// One-off recovery: rebuilds and prints the shopping list for the current
-// active plan (the "meals" collection), for when plan/draft was promoted
-// away before its grocery list got copied. Run locally:
+// One-off recovery: rebuilds the shopping list for the current active plan
+// (the "meals" collection), for when plan/draft was promoted away before
+// its grocery list got copied. Prints it, and also writes it to plan/draft
+// + sets plan/current to list_ready so it shows up on the board itself
+// (same place/shape the normal grocery-list.mjs run leaves it). Run locally:
 //
 //   node --env-file=.env scripts/rebuild-grocery-list.mjs
 //
-import { getSupabase, getCollection } from "./lib/supabaseClient.mjs";
+import { getSupabase, getDoc, getCollection, setDoc } from "./lib/supabaseClient.mjs";
 import { loadSettings } from "./lib/settings.mjs";
 
 async function main() {
@@ -32,11 +34,24 @@ async function main() {
     lowStaples.forEach((s) => lines.push(`- ${s.name}`));
   }
   lines.push("", `${settings.substitutionRules} Leave the order for me to review before it's placed.`);
+  const orderText = lines.join("\n");
 
-  console.log(lines.join("\n"));
+  console.log(orderText);
+
+  const current = (await getDoc(supabase, "plan/current")) || {};
+  const draftPlan = (await getDoc(supabase, "plan/draft")) || {};
+  await setDoc(supabase, "plan/draft", {
+    ...draftPlan,
+    orderText,
+    included: { grocery: grocery.map((g) => g.id), staples: lowStaples.map((s) => s.id) }
+  });
+  const itemCount = ingredients.length + grocery.length + lowStaples.length;
+  await setDoc(supabase, "plan/current", { ...current, status: "list_ready", statusNote: `${itemCount} items (recovered).` });
+  console.log(`\nSaved to the board - check the Shop tab. ${itemCount} items.`);
 }
 
 main().catch((err) => {
   console.error(err);
   process.exit(1);
+
 });
