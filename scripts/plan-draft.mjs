@@ -51,8 +51,9 @@ async function main() {
   if (draftMeals.length) {
     const earliest = draftMeals.map((m) => m.date).sort()[0];
     const status = ((await getDoc(supabase, "plan/current")) || {}).status;
-    // On the start day, keep the plan/draft doc while the order list is still waiting to be copied or placed.
-    const orderOutstanding = ["list_ready", "cart_built"].includes(status) && earliest >= today;
+    // Keep the plan/draft doc (and its grocery list) until the order is actually placed,
+    // no matter how many days have passed - never silently discard a pending order.
+    const orderOutstanding = ["list_ready", "cart_built"].includes(status);
     if (earliest <= today && !orderOutstanding) {
       const meals = await getCollection(supabase, "meals");
       for (const m of meals) {

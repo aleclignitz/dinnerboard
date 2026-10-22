@@ -179,7 +179,7 @@ h2{font-size:1.15rem;font-weight:700}
 .cycle{font-size:.88rem;color:var(--muted);margin:0;font-variant-numeric:tabular-nums}
 .gro{display:flex;flex-direction:column;gap:6px}
 .gro ul{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
-.gro li{padding:9px 14px;border-top:1px solid var(--line);overflow-wrap:anywhere}
+.gro li{padding:9px 14px;border-top:1px solid var(--line);overflow-wrap:anywhere;display:flex;align-items:center;justify-content:space-between;gap:10px}
 .gro li:first-child{border-top:0}
 .status a{color:inherit;font-weight:700}
 .copybox{width:100%;min-height:160px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);padding:10px 12px;font:inherit;font-size:.9rem}
@@ -453,6 +453,9 @@ h2{font-size:1.15rem;font-weight:700}
   const SNOW = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 2v20M3.3 7l17.4 10M3.3 17 20.7 7M9 4l3 2 3-2M9 20l3-2 3 2"/></svg>';
   const X = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
   const KIND = {cook:"Cook night",leftovers:"Leftovers",flex:"Flexible"};
+  const QTY_RE = /^(?:\d+\s*\/\s*\d+|\d+(?:\.\d+)?|[½¼¾⅓⅔⅛⅜⅝⅞])(?:\s*-\s*(?:\d+\s*\/\s*\d+|\d+(?:\.\d+)?))?\s*(?:tsp|teaspoons?|tbsp|tablespoons?|cups?|oz|ounces?|lbs?|pounds?|g|grams?|kg|kilograms?|ml|milliliters?|l|liters?|cloves?|cans?|jars?|packages?|pkgs?|bunche?s?|pinche?s?|dashe?s?|slices?|sprigs?|stalks?|heads?|sticks?|bags?)?\.?\s*(?:of\s+)?/i;
+  // Strips a leading quantity/unit ("1 Tbsp Fresh Sage" -> "Fresh Sage") for use as a staple name.
+  const stripQty = s => { const t = String(s||"").trim().replace(QTY_RE,"").trim(); return t ? t.charAt(0).toUpperCase()+t.slice(1) : String(s||"").trim(); };
 
   const byDate = (a,b)=>a.date<b.date?-1:a.date>b.date?1:0;
   const meals = () => S.meals.concat(S.draft).sort(byDate);
@@ -732,7 +735,8 @@ h2{font-size:1.15rem;font-weight:700}
     $("planGroWrap").hidden = !(d && d.groceries && d.groceries.length);
     if(d && d.groceries){
       $("planGroRange").textContent = d.start && d.end ? fmt(d.start,{month:"short",day:"numeric"})+" – "+fmt(d.end,{month:"short",day:"numeric"}) : "";
-      $("planGroDyn").innerHTML = d.groceries.map(g=>'<div class="gro"><span class="eyebrow">'+esc(g.section||"Groceries")+'</span><ul>'+(g.items||[]).map(i=>'<li>'+esc(i)+'</li>').join("")+'</ul></div>').join("");
+      $("planGroDyn").innerHTML = d.groceries.map(g=>'<div class="gro"><span class="eyebrow">'+esc(g.section||"Groceries")+'</span><ul>'+(g.items||[]).map(i=>
+        '<li><span class="txt">'+esc(i)+'</span><button type="button" class="btn small ghost" data-act="addPantryItem" data-name="'+esc(stripQty(i))+'" aria-label="Add '+esc(stripQty(i))+' to pantry">+ Pantry</button></li>').join("")+'</ul></div>').join("");
     }
     const items = nextOrder();
     $("nextCount").textContent = items.length ? items.length+" item"+(items.length>1?"s":"") : "";
@@ -959,6 +963,12 @@ h2{font-size:1.15rem;font-weight:700}
     else if(act==="delGrocery") save(()=>db.doc("grocery/"+id).delete());
     else if(act==="staple") save(()=>db.doc("staples/"+id).update({status:b.dataset.v}));
     else if(act==="delStaple") save(()=>db.doc("staples/"+id).delete(), "Removed from staples");
+    else if(act==="addPantryItem"){
+      const name = b.dataset.name.trim(); if(!name) return;
+      const existing = S.staples.find(s=>String(s.name||"").trim().toLowerCase()===name.toLowerCase());
+      save(()=> existing ? db.doc("staples/"+existing.id).update({status:"have"}) : db.collection("staples").add({name, group:"Pantry", status:"have", order:S.staples.length}),
+        name+" added to pantry");
+    }
     else if(act==="delFreezer") save(()=>db.doc("freezer/"+id).delete(), "Removed from the freezer list");
     else if(act==="removeFreezer") save(()=>db.doc("freezer/"+id).delete(), "Removed from the freezer list");
     else if(act==="delIdea") save(()=>db.doc("ideas/"+id).delete());
