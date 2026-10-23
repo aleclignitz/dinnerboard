@@ -256,8 +256,6 @@ h2{font-size:1.15rem;font-weight:700}
 
   <!-- TODAY -->
   <section class="view" id="v-today">
-    <!-- Machine-readable mirror of orderText(), for agents that can't read their own clipboard back. -->
-    <pre id="museOrder" aria-hidden="true" hidden data-status=""></pre>
     <div class="today-grid">
       <div class="tcol">
         <div class="stack" id="todayDyn">
@@ -408,6 +406,14 @@ h2{font-size:1.15rem;font-weight:700}
       <div class="section-head"><h2>Reset</h2></div>
       <p class="muted" style="margin:0;font-size:.92rem">Removes every meal from the Plan tab. Past meals and ratings are kept, and the next weekly run drafts a fresh plan.</p>
       <div><button type="button" class="btn danger small" data-act="clearPlan">Clear all planned meals</button></div>
+    </div>
+  </section>
+
+  <!-- MUSE: plain rendered text only (no hidden nodes, no data-* attrs, no JS needed to read it) - visit #muse directly. -->
+  <section class="view" id="v-muse" hidden>
+    <div class="section" style="margin-top:0">
+      <p id="museStatus" style="font-family:monospace;font-weight:700"></p>
+      <pre id="museText" style="white-space:pre-wrap;font-family:monospace;margin:0"></pre>
     </div>
   </section>
 </div>
@@ -582,7 +588,7 @@ h2{font-size:1.15rem;font-weight:700}
   function renderHeader(){
     const t = today();
     $("todayLabel").textContent = fmt(t,{weekday:"long",month:"short",day:"numeric"});
-    $("viewTitle").textContent = {today:"Tonight",plan:"Weekly plan",shop:"Shopping",deals:"Deals",feedback:"Feedback",settings:"Settings"}[tab];
+    $("viewTitle").textContent = {today:"Tonight",plan:"Weekly plan",shop:"Shopping",deals:"Deals",feedback:"Feedback",settings:"Settings",muse:"Muse"}[tab];
     const ms = S.meals.slice().sort(byDate);
     if(ms.length){
       const a = ms[0].date, b = ms[ms.length-1].date;
@@ -858,9 +864,9 @@ h2{font-size:1.15rem;font-weight:700}
     }catch(e){ fallback(); }
   }
   function renderMuseOrder(){
-    const el = $("museOrder"); if(!el) return;
-    el.textContent = orderText();
-    el.dataset.status = status();
+    const st = $("museStatus"), tx = $("museText"); if(!st || !tx) return;
+    st.textContent = "STATUS: "+status();
+    tx.textContent = orderText();
   }
 
   function recipeHtml(m){
@@ -983,7 +989,7 @@ h2{font-size:1.15rem;font-weight:700}
     }
   }
 
-  const TABS = ["today","plan","shop","deals","feedback","settings"];
+  const TABS = ["today","plan","shop","deals","feedback","settings","muse"];
   document.addEventListener("click", e=>{
     const tb = e.target.closest("[data-tab]"); if(tb){ setTab(tb.dataset.tab); return; }
     if(e.target.id==="scrim"){ closeSheet(); return; }
