@@ -256,6 +256,8 @@ h2{font-size:1.15rem;font-weight:700}
 
   <!-- TODAY -->
   <section class="view" id="v-today">
+    <!-- Machine-readable mirror of orderText(), for agents that can't read their own clipboard back. -->
+    <pre id="museOrder" aria-hidden="true" hidden data-status=""></pre>
     <div class="today-grid">
       <div class="tcol">
         <div class="stack" id="todayDyn">
@@ -343,6 +345,20 @@ h2{font-size:1.15rem;font-weight:700}
     </div>
   </section>
 
+  <!-- DEALS -->
+  <section class="view" id="v-deals" hidden>
+    <div id="dealsStatus" class="stack" style="margin-bottom:20px" hidden></div>
+    <div class="section" style="margin-top:0">
+      <div class="section-head"><h2>This week's deals</h2><span class="count" id="dealsRange"></span></div>
+      <p class="muted" style="margin:0;font-size:.92rem">From the weekly grocery store flyer. Tap Add to put an item on the next grocery order.</p>
+      <div id="dealsDyn" class="stack"></div>
+    </div>
+    <div class="section" id="couponsWrap" hidden>
+      <div class="section-head"><h2>Coupons</h2></div>
+      <div id="couponsDyn" class="stack"></div>
+    </div>
+  </section>
+
   <!-- FEEDBACK -->
   <section class="view" id="v-feedback" hidden>
     <div class="section" style="margin-top:0">
@@ -404,6 +420,8 @@ h2{font-size:1.15rem;font-weight:700}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>Plan</button>
     <button type="button" data-tab="shop">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9h16l-1.6 9.2a2 2 0 0 1-2 1.8H7.6a2 2 0 0 1-2-1.8z"/><path d="M8.5 9 11 4M15.5 9 13 4"/></svg>Shopping<span class="badge" id="navBadge" hidden></span></button>
+    <button type="button" data-tab="deals">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.6 12.3 12.7 20.2a1.5 1.5 0 0 1-2.1 0l-6.8-6.8a1.5 1.5 0 0 1 0-2.1l7.9-7.9H17a3.5 3.5 0 0 1 3.5 3.5v4.6a1.5 1.5 0 0 1-.4 1z"/><circle cx="14.8" cy="9.2" r="1.3"/></svg>Deals</button>
     <button type="button" data-tab="feedback">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="m12 3.5 2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z"/></svg>Feedback</button>
     <button type="button" data-tab="settings">
@@ -454,7 +472,7 @@ h2{font-size:1.15rem;font-weight:700}
 
 <script>
 (function(){
-  const S = {meals:[],draft:[],history:[],notes:[],grocery:[],staples:[],freezer:[],ideas:[],plan:null,dplan:null,automation:null,settings:null,planDraft:null,recipeCount:null,loaded:{}};
+  const S = {meals:[],draft:[],history:[],notes:[],grocery:[],staples:[],freezer:[],ideas:[],plan:null,dplan:null,automation:null,settings:null,planDraft:null,recipeCount:null,ads:null,loaded:{}};
   const checked = new Set(); let wakeLock = null;
   let db = null, dbState = "pending", readOnly = false, tab = "today", openId = null;
   const $ = id => document.getElementById(id);
@@ -564,7 +582,7 @@ h2{font-size:1.15rem;font-weight:700}
   function renderHeader(){
     const t = today();
     $("todayLabel").textContent = fmt(t,{weekday:"long",month:"short",day:"numeric"});
-    $("viewTitle").textContent = {today:"Tonight",plan:"Weekly plan",shop:"Shopping",feedback:"Feedback",settings:"Settings"}[tab];
+    $("viewTitle").textContent = {today:"Tonight",plan:"Weekly plan",shop:"Shopping",deals:"Deals",feedback:"Feedback",settings:"Settings"}[tab];
     const ms = S.meals.slice().sort(byDate);
     if(ms.length){
       const a = ms[0].date, b = ms[ms.length-1].date;
@@ -781,6 +799,30 @@ h2{font-size:1.15rem;font-weight:700}
     $("freezerWide").innerHTML = $("freezerDyn").innerHTML;
   }
 
+  // A deal string is "Name — price — terms"; only the name belongs in the grocery list.
+  const dealName = d => String(d||"").split(" — ")[0].trim();
+  const cap = s => s ? s.charAt(0).toUpperCase()+s.slice(1) : s;
+  const fmtAdDate = iso => { const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleDateString("en-US",{month:"short",day:"numeric"}); };
+  function renderDeals(){
+    if(dbState==="none"){ ["dealsDyn","couponsDyn"].forEach(i=>$(i).innerHTML=""); return; }
+    if(dbState==="pending"){ $("dealsDyn").innerHTML = '<div class="empty">Loading the weekly ad…</div>'; return; }
+    const ad = S.ads;
+    $("dealsRange").textContent = ad && ad.ok && ad.validFrom && ad.validTo ? fmtAdDate(ad.validFrom)+" – "+fmtAdDate(ad.validTo) : "";
+    if(!ad){ $("dealsDyn").innerHTML = '<div class="empty">No weekly ad saved yet. It\'s fetched automatically early in the week.</div>'; $("couponsWrap").hidden = true; return; }
+    if(ad.ok === false){ $("dealsDyn").innerHTML = '<div class="empty">Couldn\'t fetch this week\'s ad'+(ad.error?': '+esc(ad.error):'')+'.</div>'; $("couponsWrap").hidden = true; return; }
+    const inGrocery = new Set(S.grocery.map(g=>String(g.text||"").trim().toLowerCase()));
+    const dealRow = d => { const name = dealName(d), added = inGrocery.has(name.toLowerCase());
+      return '<li><span class="txt">'+esc(d)+'</span><button type="button" class="btn small ghost" data-act="addDeal" data-name="'+esc(name)+'" '+(added?"disabled":"")+'>'+(added?"Added":"Add")+'</button></li>'; };
+    const sections = [];
+    const proteinItems = new Set();
+    (ad.proteinDeals||[]).forEach(p=>{ if(p.items && p.items.length){ p.items.forEach(i=>proteinItems.add(i)); sections.push('<div class="gro"><span class="eyebrow">'+esc(cap(p.protein))+'</span><ul>'+p.items.map(dealRow).join("")+'</ul></div>'); } });
+    const other = (ad.deals||[]).filter(d=>!proteinItems.has(d));
+    if(other.length) sections.push('<div class="gro"><span class="eyebrow">Other deals</span><ul>'+other.map(dealRow).join("")+'</ul></div>');
+    $("dealsDyn").innerHTML = sections.length ? sections.join("") : '<div class="empty">No deals found in this week\'s ad.</div>';
+    $("couponsWrap").hidden = !(ad.coupons && ad.coupons.length);
+    $("couponsDyn").innerHTML = ad.coupons && ad.coupons.length ? '<div class="gro"><ul>'+ad.coupons.map(dealRow).join("")+'</ul></div>' : "";
+  }
+
   function renderFeedback(){
     if(dbState==="none"){ ["ideasDyn","ratingsDyn"].forEach(i=>$(i).innerHTML=""); $("guideDyn").innerHTML=""; return; }
     if(dbState==="pending") return;
@@ -814,6 +856,11 @@ h2{font-size:1.15rem;font-weight:700}
     try{
       navigator.clipboard.writeText(text).then(()=>toast("List copied. Paste it into Muse."), fallback);
     }catch(e){ fallback(); }
+  }
+  function renderMuseOrder(){
+    const el = $("museOrder"); if(!el) return;
+    el.textContent = orderText();
+    el.dataset.status = status();
   }
 
   function recipeHtml(m){
@@ -898,7 +945,7 @@ h2{font-size:1.15rem;font-weight:700}
   }
 
   function render(){
-    renderHeader(); renderToday(); renderPlan(); renderShop(); renderFeedback(); renderSettings();
+    renderHeader(); renderToday(); renderPlan(); renderShop(); renderDeals(); renderFeedback(); renderSettings(); renderMuseOrder();
     if(openId) renderSheet();
   }
 
@@ -936,7 +983,7 @@ h2{font-size:1.15rem;font-weight:700}
     }
   }
 
-  const TABS = ["today","plan","shop","feedback","settings"];
+  const TABS = ["today","plan","shop","deals","feedback","settings"];
   document.addEventListener("click", e=>{
     const tb = e.target.closest("[data-tab]"); if(tb){ setTab(tb.dataset.tab); return; }
     if(e.target.id==="scrim"){ closeSheet(); return; }
@@ -987,6 +1034,11 @@ h2{font-size:1.15rem;font-weight:700}
     }
     else if(act==="delFreezer") save(()=>db.doc("freezer/"+id).delete(), "Removed from the freezer list");
     else if(act==="removeFreezer") save(()=>db.doc("freezer/"+id).delete(), "Removed from the freezer list");
+    else if(act==="addDeal"){
+      const name = b.dataset.name.trim(); if(!name) return;
+      if(S.grocery.find(x=>String(x.text||"").trim().toLowerCase()===name.toLowerCase())){ toast("Already on the list"); return; }
+      save(()=>db.collection("grocery").add({text:name, at:new Date().toISOString()}), name+" added to the next order");
+    }
     else if(act==="delIdea") save(()=>db.doc("ideas/"+id).delete());
   });
   document.addEventListener("keydown", e=>{ if(e.key==="Escape" && openId) closeSheet(); });
@@ -1058,6 +1110,7 @@ h2{font-size:1.15rem;font-weight:700}
     db.doc("settings/automation").onSnapshot(s=>{ S.automation = s.exists ? s.data() : null; render(); }, ()=>{});
     db.doc("settings/app").onSnapshot(s=>{ S.settings = s.exists ? s.data() : null; render(); }, ()=>{});
     db.doc("settings/planDraft").onSnapshot(s=>{ const was = S.planDraft && S.planDraft.status; S.planDraft = s.exists ? s.data() : null; render(); if(S.planDraft && S.planDraft.status!==was) refreshRecipeCount(); }, ()=>{});
+    db.doc("ads/current").onSnapshot(s=>{ S.ads = s.exists ? s.data() : null; render(); }, ()=>{});
     refreshRecipeCount();
   })();
 })();

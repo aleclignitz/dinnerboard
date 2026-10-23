@@ -6,41 +6,12 @@
 // for now instead of a Drive doc.
 import { getSupabase, getDoc, getCollection, setDoc } from "./lib/supabaseClient.mjs";
 import { selectRecipeForMeal, generateFreeformRecipe } from "./lib/recipePicker.mjs";
-import { askClaude, parseClaudeJson } from "./lib/claude.mjs";
+import { trimIngredientsAgainstPantry } from "./lib/groceryList.mjs";
 import { loadSettings } from "./lib/settings.mjs";
 import { scheduledWindowOpen } from "./lib/planWindow.mjs";
 
 // Filled from board Settings (falling back to env vars) once main() starts.
 let STORE, SUBSTITUTION_RULES, MAX_COOK_MINUTES, ORDER_METHOD, PICKUP_WINDOW, SETTINGS_GUIDELINES;
-
-
-
-// Word matching can't tell "2 lb ground beef" needs buying despite a freezer
-// entry reading "Ground beef, 1 lb", so Claude reconciles quantities/spices
-// instead. Falls back to the raw, unfiltered list if the call fails.
-async function trimIngredientsAgainstPantry({ ingredients, staples, freezer }) {
-  if (!ingredients.length) return ingredients;
-  const system = "You trim a merged recipe ingredient list down to what still needs to be bought, and output ONLY valid JSON, no prose.";
-  const prompt = `Raw recipe ingredients for this week's meals (combined across recipes, may include duplicates/overlaps - merge those into one line):
-${JSON.stringify(ingredients)}
-
-Pantry staples, with status ("have" = stocked, "low"/"unknown" = buy it): ${JSON.stringify(staples)}
-
-Freezer inventory on hand, with quantities: ${JSON.stringify(freezer)}
-
-Drop any ingredient fully covered by a "have" staple (e.g. skip salt, pepper, common spices, cooking oil, soy sauce) or by freezer stock that covers the amount needed this week. If multiple recipes need more of something than the freezer has (e.g. two recipes need 1 lb ground beef each but the freezer only has 1 lb), keep a line for the remaining amount instead of dropping it entirely. Merge duplicate/overlapping ingredients into one line with a combined quantity. Do not invent items that weren't in the raw list, and do not drop anything you're unsure about - buying a small duplicate is fine, missing an ingredient is not.
-
-Return JSON with exactly this shape:
-{"items": ["item 1", "item 2"]}`;
-  try {
-    const raw = await askClaude({ system, prompt, maxTokens: 1500 });
-    const parsed = parseClaudeJson(raw);
-    return Array.isArray(parsed.items) && parsed.items.length ? parsed.items : ingredients;
-  } catch (err) {
-    console.error("Pantry trim failed, falling back to the unfiltered ingredient list:", err);
-    return ingredients;
-  }
-}
 
 async function main() {
   const scheduled = process.env.GITHUB_EVENT_NAME === "schedule";

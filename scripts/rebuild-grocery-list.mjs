@@ -7,6 +7,7 @@
 //   node --env-file=.env scripts/rebuild-grocery-list.mjs
 //
 import { getSupabase, getDoc, getCollection, setDoc } from "./lib/supabaseClient.mjs";
+import { trimIngredientsAgainstPantry } from "./lib/groceryList.mjs";
 import { loadSettings } from "./lib/settings.mjs";
 
 async function main() {
@@ -17,8 +18,10 @@ async function main() {
   if (!meals.length) throw new Error("No meals found in the active plan.");
   const grocery = await getCollection(supabase, "grocery");
   const staples = await getCollection(supabase, "staples");
+  const freezer = await getCollection(supabase, "freezer");
   const lowStaples = staples.filter((s) => s.status === "low");
-  const ingredients = meals.flatMap((m) => (m.recipe && m.recipe.ingredients) || []);
+  const rawIngredients = meals.flatMap((m) => (m.recipe && m.recipe.ingredients) || []);
+  const ingredients = await trimIngredientsAgainstPantry({ ingredients: rawIngredients, staples, freezer });
 
   const lines = [];
   const timing = settings.orderMethod === "pickup" ? `, with an afternoon pickup (${settings.pickupWindow} if available)` : ", for delivery";
