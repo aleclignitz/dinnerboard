@@ -1,17 +1,13 @@
-// Wednesday job (runs after plan-draft, same morning as fetch-weekly-ad):
-// finalizes any meals marked "Replace", builds one grocery list, and saves
-// it on the board behind the Copy list button. Ported from
-// automation/2-grocery-list-task.md, minus the Google Drive save (STEP 4) -
-// Muse (or any agent) picks the list up via the board's Copy list button
-// for now instead of a Drive doc.
+// Runs nightly, but only builds the list the night before the board's
+// configured delivery day (or whenever started manually, e.g. by the board's
+// "Confirm plan & build list now" button). Finalizes any meals still marked
+// "Replace", builds one grocery list, and saves it on the board behind the
+// Copy list button.
 import { getSupabase, getDoc, getCollection, setDoc } from "./lib/supabaseClient.mjs";
-import { selectRecipeForMeal, generateFreeformRecipe } from "./lib/recipePicker.mjs";
-import { trimIngredientsAgainstPantry } from "./lib/groceryList.mjs";
-import { loadSettings } from "./lib/settings.mjs";
-import { scheduledWindowOpen } from "./lib/planWindow.mjs";
-
-// Filled from board Settings (falling back to env vars) once main() starts.
-let STORE, SUBSTITUTION_RULES, MAX_COOK_MINUTES, ORDER_METHOD, PICKUP_WINDOW, SETTINGS_GUIDELINES;
+import { replaceMarkedMeals } from "./lib/replaceMeals.mjs";
+import { buildOrder } from "./lib/groceryList.mjs";
+import { loadSettings, automationEnabled } from "./lib/settings.mjs";
+import { addDays, scheduledWindowOpen, todayInZone } from "./lib/planWindow.mjs";
 
 async function main() {
   const scheduled = process.env.GITHUB_EVENT_NAME === "schedule";
@@ -21,23 +17,12 @@ async function main() {
     return;
   }
   const supabase = getSupabase();
-
-  // Off by default: the board's "Turn on automation" button must set
-  // enabled:true before any processing or Anthropic calls happen here.
-  const automation = await getDoc(supabase, "settings/automation");
-  if (!automation || automation.enabled !== true) {
+  if (!(await automationEnabled(supabase))) {
     console.log("Automation is off (default). Turn it on from the board to enable the weekly grocery list. Skipping.");
     return;
   }
 
   const settings = await loadSettings(supabase);
-  STORE = settings.storeName;
-  SUBSTITUTION_RULES = settings.substitutionRules;
-  MAX_COOK_MINUTES = settings.maxCookMinutes;
-  ORDER_METHOD = settings.orderMethod; // "pickup" or "delivery"
-  PICKUP_WINDOW = settings.pickupWindow;
-  SETTINGS_GUIDELINES = settings.planGuidelines;
-
   const current = (await getDoc(supabase, "plan/current")) || {};
   const draftPlan = await getDoc(supabase, "plan/draft");
   const ad = await getDoc(supabase, "ads/current");
@@ -49,86 +34,37 @@ async function main() {
     console.log("No list due this week.");
     return;
   }
-
-  // STEP 2: replace any meal marked swapOut
-  const draftMeals = await getCollection(supabase, "draft");
-  const toSwap = draftMeals.filter((m) => m.swapOut);
-  const history = await getCollection(supabase, "history");
-  const freezer = await getCollection(supabase, "freezer");
-  const usedRecipeIds = [...draftMeals, ...history].map((m) => m.sourceRecipeId).filter(Boolean);
-  for (const m of toSwap) {
-    const notes = (await getCollection(supabase, "notes")).filter((n) => n.meal === m.id);
-    const ideas = await getCollection(supabase, "ideas");
-    const context = { history: [...history.slice(-30), ...notes], freezer, ideas, saleDeals: ad && ad.ok ? ad.deals : [] };
-
-    let replacement;
-    if (m.kind === "cook") {
-      const selection = await selectRecipeForMeal(supabase, {
-        date: m.date,
-        kind: m.kind,
-        maxTime: MAX_COOK_MINUTES,
-        guidelines: SETTINGS_GUIDELINES || current.guidelines || "",
-        context,
-        excludeIds: usedRecipeIds
-      });
-      if (selection) {
-        replacement = selection;
-        usedRecipeIds.push(selection.sourceRecipeId);
-      }
+  if (scheduled && draftPlan.pickup) {
+    const today = todayInZone();
+    if (addDays(draftPlan.pickup, -1) !== today) {
+      console.log(`Scheduled run, but tonight (${today}) isn't the night before delivery (${draftPlan.pickup}). Skipping.`);
+      return;
     }
-    if (!replacement) {
-      replacement = await generateFreeformRecipe({ date: m.date, kind: m.kind, guidelines: SETTINGS_GUIDELINES || current.guidelines || "", context });
-    }
-    await setDoc(supabase, `draft/${m.id}`, { ...m, ...replacement, swapOut: false });
   }
 
-  // STEP 3: build the order list
-  const finalMeals = await getCollection(supabase, "draft");
-  const grocery = await getCollection(supabase, "grocery");
-  const staples = await getCollection(supabase, "staples");
-  const lowStaples = staples.filter((s) => s.status === "low");
-  const rawIngredients = finalMeals.flatMap((m) => (m.recipe && m.recipe.ingredients) || []);
-  const allIngredients = await trimIngredientsAgainstPantry({ ingredients: rawIngredients, staples, freezer });
-  const pickupLabel = draftPlan.pickup || "tomorrow";
+  // STEP 2: finalize any meal still marked swapOut (normally already replaced from the board)
+  await replaceMarkedMeals(supabase, { current, ad, maxCookMinutes: settings.maxCookMinutes, guidelines: settings.planGuidelines });
 
-  const lines = [];
-  const timing = ORDER_METHOD === "pickup" ? `, with an afternoon pickup (${PICKUP_WINDOW} if available)` : ", for delivery";
-  lines.push(`Please build a ${STORE} order for ${pickupLabel}${timing}, with these items:`);
-  lines.push("", "Recipe ingredients:");
-  allIngredients.forEach((i) => lines.push(`- ${i}`));
-  if (grocery.length) {
-    lines.push("", "Quick adds:");
-    grocery.forEach((g) => lines.push(`- ${g.text}`));
-  }
-  if (lowStaples.length) {
-    lines.push("", "Staples running low:");
-    lowStaples.forEach((s) => lines.push(`- ${s.name}`));
-  }
-  if (ad && ad.ok && ad.coupons.length) {
-    lines.push("", "Coupons to clip (Tom Thumb weekly ad):");
-    ad.coupons.forEach((c) => lines.push(`- ${c}`));
-  }
-  if (!ad || ad.ok === false) {
-    lines.push("", "Note: this week's Tom Thumb ad could not be retrieved - no sale-based substitutions were applied.");
-  }
-  lines.push("", `${SUBSTITUTION_RULES} Leave the order for me to review before it's placed.`);
-  const orderText = lines.join("\n");
-
-  // STEP 5: write back (no Google Drive save in this basic version)
-  await setDoc(supabase, "plan/draft", {
-    ...draftPlan,
-    orderText,
-    included: { grocery: grocery.map((g) => g.id), staples: lowStaples.map((s) => s.id) }
+  // STEP 3: build the order list and save it on the board
+  const pickup = draftPlan.pickup || "tomorrow";
+  const { orderText, included, itemCount } = await buildOrder({
+    meals: await getCollection(supabase, "draft"),
+    grocery: await getCollection(supabase, "grocery"),
+    staples: await getCollection(supabase, "staples"),
+    freezer: await getCollection(supabase, "freezer"),
+    settings,
+    ad,
+    pickup
   });
-  const itemCount = allIngredients.length + grocery.length + lowStaples.length;
+  await setDoc(supabase, "plan/draft", { ...draftPlan, orderText, included });
   await setDoc(supabase, "plan/current", {
     ...current,
     status: "list_ready",
-    pickup: pickupLabel,
+    pickup,
     statusNote: `${itemCount} items.${current.status === "drafted" ? " Not approved yet." : ""}`
   });
 
-  console.log(`Grocery list ready: ${itemCount} items for ${pickupLabel}.`);
+  console.log(`Grocery list ready: ${itemCount} items for ${pickup}.`);
 }
 
 main().catch((err) => {

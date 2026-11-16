@@ -2,11 +2,17 @@
 // `settings/app`). Precedence: saved board value > environment variable >
 // built-in default. Secrets (API keys, browser session) never live here.
 import { getDoc } from "./supabaseClient.mjs";
+import { DAY_NAMES } from "./planWindow.mjs";
 
 export const SETTINGS_DOC = "settings/app";
 
 export const SETTING_DEFS = {
   startDate: { env: null, default: "" },
+  // Day of week (see DAY_NAMES) Claude drafts the next week's plan.
+  planDay: { env: "PLAN_DAY", default: "wednesday", oneOf: DAY_NAMES },
+  // Day of week groceries are delivered. The grocery list is built the night
+  // before this day; the plan's first cook night is the day after it.
+  deliveryDay: { env: "DELIVERY_DAY", default: "thursday", oneOf: DAY_NAMES },
   planGuidelines: { env: "PLAN_GUIDELINES", default: "" },
   maxCookMinutes: { env: "PLAN_MAX_COOK_MINUTES", default: 45, number: true },
   storeName: { env: "STORE_NAME", default: "Grocery store pickup" },
@@ -42,4 +48,11 @@ export function resolveSettings(stored = {}, env = process.env) {
 
 export async function loadSettings(supabase, env = process.env) {
   return resolveSettings((await getDoc(supabase, SETTINGS_DOC)) || {}, env);
+}
+
+// Every scheduled job checks this first. The board's Settings switch sets it,
+// and it is off by default: nothing is processed and Anthropic is never
+// called until it is turned on.
+export async function automationEnabled(supabase) {
+  return (await getDoc(supabase, "settings/automation"))?.enabled === true;
 }

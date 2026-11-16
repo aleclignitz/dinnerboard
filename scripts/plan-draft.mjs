@@ -1,21 +1,13 @@
-// Wednesday job (runs after fetch-weekly-ad; also Thursday/Friday, to promote): promotes
-// a due draft into the live plan, then drafts the next week (Thursday dinner
-// through Wednesday) the day before it starts. Ported from automation/1-plan-draft-task.md, minus the Gmail
-// order-check step (STEP 1B). Cook-night recipes come from the Supabase
-// recipes dataset via a deterministic picker + Claude review
-// (lib/recipePicker.mjs), falling back to free-form generation only if
-// nothing in the dataset fits.
+// Runs daily: promotes a due draft into the live plan, then (only on the
+// board's configured plan day) drafts the next week. Cook-night recipes come
+// from the Supabase recipes dataset via a deterministic picker + Claude
+// review (lib/recipePicker.mjs), falling back to free-form generation only
+// if nothing in the dataset fits.
 import { getSupabase, getDoc, getCollection, setDoc, deleteDoc } from "./lib/supabaseClient.mjs";
 import { askClaude, parseClaudeJson } from "./lib/claude.mjs";
-import { selectRecipeForMeal, generateFreeformRecipe } from "./lib/recipePicker.mjs";
-import { loadSettings } from "./lib/settings.mjs";
-import { addDays, nextPlanWindow, meetsWindow, PLAN_DAYS, RHYTHM } from "./lib/planWindow.mjs";
-
-const TIME_ZONE = process.env.PLAN_TIME_ZONE || "America/Chicago";
-
-function todayInZone() {
-  return new Date().toLocaleDateString("en-CA", { timeZone: TIME_ZONE }); // YYYY-MM-DD
-}
+import { pickRecipe } from "./lib/recipePicker.mjs";
+import { loadSettings, automationEnabled } from "./lib/settings.mjs";
+import { nextPlanWindow, meetsWindow, describeRhythm, dayNameToIndex, todayInZone, weekdayOf, PLAN_DAYS } from "./lib/planWindow.mjs";
 
 // Lets the board's "Manually fetch weekly recipes from recipe box" button show progress/results.
 async function status(supabase, patch) {
@@ -26,74 +18,80 @@ async function status(supabase, patch) {
   }
 }
 
+// Moves the current meals to history and the draft into meals once the draft
+// has started. Kept until the order is actually placed, no matter how many
+// days have passed, so a pending order is never silently discarded.
+async function promoteDueDraft(supabase, today) {
+  const draftMeals = await getCollection(supabase, "draft");
+  if (!draftMeals.length) return false;
+  const earliest = draftMeals.map((m) => m.date).sort()[0];
+  const planStatus = ((await getDoc(supabase, "plan/current")) || {}).status;
+  if (earliest > today || ["list_ready", "cart_built"].includes(planStatus)) return false;
+
+  for (const { id, ...rest } of await getCollection(supabase, "meals")) {
+    await setDoc(supabase, `history/${id}`, rest);
+    await deleteDoc(supabase, `meals/${id}`);
+  }
+  for (const { id, swapOut, ...rest } of draftMeals) {
+    await setDoc(supabase, `meals/${id}`, rest);
+    await deleteDoc(supabase, `draft/${id}`);
+  }
+  await deleteDoc(supabase, "plan/draft");
+  const current = (await getDoc(supabase, "plan/current")) || {};
+  const dates = (await getCollection(supabase, "meals")).map((m) => m.date).sort();
+  await setDoc(supabase, "plan/current", {
+    ...current,
+    start: dates[0],
+    end: dates[dates.length - 1],
+    status: "active",
+    pickup: "",
+    statusNote: ""
+  });
+  return true;
+}
+
 async function main() {
   const supabase = getSupabase();
   await status(supabase, { status: "running", message: "" });
 
-  // Off by default: the board's "Turn on automation" button must set
-  // enabled:true before any processing or Anthropic calls happen here.
-  const automation = await getDoc(supabase, "settings/automation");
-  if (!automation || automation.enabled !== true) {
+  if (!(await automationEnabled(supabase))) {
     console.log("Automation is off (default). Turn it on from the board to enable weekly plan drafts. Skipping.");
     await status(supabase, { status: "skipped", message: "Automation is off. Turn it on in Settings, then try again." });
     return;
   }
 
   const settings = await loadSettings(supabase);
-  const GUIDELINES = settings.planGuidelines;
-  const MAX_COOK_MINUTES = settings.maxCookMinutes;
-
   const today = todayInZone();
   const notes = [];
 
   // STEP 1: housekeeping - promote a due draft into the live plan
-  let draftMeals = await getCollection(supabase, "draft");
-  if (draftMeals.length) {
-    const earliest = draftMeals.map((m) => m.date).sort()[0];
-    const status = ((await getDoc(supabase, "plan/current")) || {}).status;
-    // Keep the plan/draft doc (and its grocery list) until the order is actually placed,
-    // no matter how many days have passed - never silently discard a pending order.
-    const orderOutstanding = ["list_ready", "cart_built"].includes(status);
-    if (earliest <= today && !orderOutstanding) {
-      const meals = await getCollection(supabase, "meals");
-      for (const m of meals) {
-        const { id, ...rest } = m;
-        await setDoc(supabase, `history/${id}`, rest);
-        await deleteDoc(supabase, `meals/${id}`);
-      }
-      for (const m of draftMeals) {
-        const { id, swapOut, ...rest } = m;
-        await setDoc(supabase, `meals/${id}`, rest);
-        await deleteDoc(supabase, `draft/${id}`);
-      }
-      await deleteDoc(supabase, "plan/draft");
-      const current = (await getDoc(supabase, "plan/current")) || {};
-      const dates = (await getCollection(supabase, "meals")).map((m) => m.date).sort();
-      await setDoc(supabase, "plan/current", {
-        ...current,
-        start: dates[0],
-        end: dates[dates.length - 1],
-        status: "active",
-        pickup: "",
-        statusNote: ""
-      });
-      notes.push("Promoted the drafted plan to active.");
-    }
-  }
+  if (await promoteDueDraft(supabase, today)) notes.push("Promoted the drafted plan to active.");
 
   // STEP 2: is a draft due?
-  draftMeals = await getCollection(supabase, "draft");
-  if (draftMeals.length) {
+  if ((await getCollection(supabase, "draft")).length) {
     console.log("Draft already pending, nothing to do.", notes.join(" "));
     await status(supabase, { status: "skipped", message: "A draft is already waiting for review on the Plan tab." });
     return;
   }
   const meals = await getCollection(supabase, "meals");
-  // With no plan yet, the board Settings start date (if still in the future) is the first day to plan.
-  const { start: newStart, end: newEnd, pickup, due } = nextPlanWindow({ today, mealDates: meals.map((m) => m.date), startDate: settings.startDate });
+  // With no plan yet, the board Settings start date (if still in the future, else the
+  // next configured delivery day) is the first day to plan.
+  const { start: newStart, end: newEnd, pickup, due } = nextPlanWindow({
+    today,
+    mealDates: meals.map((m) => m.date),
+    startDate: settings.startDate,
+    deliveryDow: dayNameToIndex(settings.deliveryDay)
+  });
   if (!due) {
     console.log(`Next draft not due until the day before ${newStart}.`, notes.join(" "));
     await status(supabase, { status: "skipped", message: `Next plan isn't due until the day before ${newStart}.` });
+    return;
+  }
+  // A new draft is only started on the board's configured plan day; promotion above still runs daily.
+  if (weekdayOf(today) !== dayNameToIndex(settings.planDay)) {
+    const message = `Next plan is due, but today isn't the configured plan day (${settings.planDay}).`;
+    console.log(message, notes.join(" "));
+    await status(supabase, { status: "skipped", message });
     return;
   }
 
@@ -104,17 +102,17 @@ async function main() {
   const staples = await getCollection(supabase, "staples");
   const freezer = await getCollection(supabase, "freezer");
   const current = (await getDoc(supabase, "plan/current")) || {};
-  const guidelines = GUIDELINES || current.guidelines || "";
+  const guidelines = settings.planGuidelines || current.guidelines || "";
   const ad = await getDoc(supabase, "ads/current");
   const saleSummary = ad && ad.ok && ad.proteinDeals && ad.proteinDeals.length
     ? ad.proteinDeals.map((p) => `${p.protein}: ${p.items.join("; ")}`).join(" | ")
     : "(no sale data this week)";
 
-  // STEP 4-6: ask Claude to draft the plan skeleton as JSON
+  // STEP 4: ask Claude to draft the plan skeleton as JSON
   const system = "You write a one-week household dinner plan as strict JSON only, no prose, no markdown fences.";
   const prompt = `Household guidelines: ${guidelines}
-Plan range: ${newStart} to ${newEnd} (exactly ${PLAN_DAYS} dinners, one per date). Grocery order day: ${pickup}.
-Default rhythm: ${RHYTHM}. Fresh produce and the sale items bought this week should be used within the week.
+Plan range: ${newStart} to ${newEnd} (exactly ${PLAN_DAYS} dinners, one per date). Groceries are delivered ${pickup}; the first dinner is the day after, once everything is put away.
+Default rhythm: ${describeRhythm(newStart)}. Fresh produce and the sale items bought this week should be used within the week.
 Recent history with ratings (bring back 4-5 star meals at most twice, never repeat 1-2 star meals): ${JSON.stringify(history.slice(-30))}
 Requests to address: ${JSON.stringify(ideas)}
 Freezer on hand (use first): ${JSON.stringify(freezer)}
@@ -132,43 +130,29 @@ Return JSON with exactly this shape:
   "groceries": [{"section":"Proteins","items":[""]}]
 }`;
 
-  const raw = await askClaude({ system, prompt, maxTokens: 8000 });
-  const plan = parseClaudeJson(raw);
+  const plan = parseClaudeJson(await askClaude({ system, prompt, maxTokens: 8000 }));
   plan.meals = meetsWindow(plan.meals, newStart, newEnd);
   if (!plan.meals.length) throw new Error(`Claude returned no meals dated ${newStart} to ${newEnd}`);
 
-  // STEP 5b: fill in a real recipe for every cook night, from the Supabase
-  // recipes dataset when possible (deterministic pick + Claude review),
-  // falling back to free-form generation only if nothing fits.
+  // STEP 5: fill in a real recipe for every cook night
   const context = { history: history.slice(-30), freezer, staples };
   const usedRecipeIds = history.map((m) => m.sourceRecipeId).filter(Boolean);
   for (const meal of plan.meals) {
-    if (meal.kind !== "cook") {
-      delete meal.protein;
-      continue;
-    }
-    const selection = await selectRecipeForMeal(supabase, {
-      date: meal.date,
-      kind: meal.kind,
-      protein: meal.protein,
-      maxTime: MAX_COOK_MINUTES,
-      guidelines,
-      context,
-      excludeIds: usedRecipeIds
-    });
-    if (selection) {
-      meal.title = selection.title;
-      meal.sourceRecipeId = selection.sourceRecipeId;
-      meal.details = selection.details || meal.details || "";
-      meal.thaw = selection.thaw || meal.thaw || "";
-      meal.recipe = selection.recipe;
-      usedRecipeIds.push(selection.sourceRecipeId);
-    } else {
-      const fallback = await generateFreeformRecipe({ date: meal.date, kind: meal.kind, guidelines, context });
-      meal.title = fallback.title;
-      meal.details = fallback.details || meal.details || "";
-      meal.thaw = fallback.thaw || meal.thaw || "";
-      meal.recipe = fallback.recipe;
+    if (meal.kind === "cook") {
+      const r = await pickRecipe(supabase, {
+        date: meal.date,
+        kind: meal.kind,
+        protein: meal.protein,
+        maxTime: settings.maxCookMinutes,
+        guidelines,
+        context,
+        excludeIds: usedRecipeIds
+      });
+      Object.assign(meal, { title: r.title, details: r.details || meal.details || "", thaw: r.thaw || meal.thaw || "", recipe: r.recipe });
+      if (r.sourceRecipeId) {
+        meal.sourceRecipeId = r.sourceRecipeId;
+        usedRecipeIds.push(r.sourceRecipeId);
+      }
     }
     delete meal.protein;
   }

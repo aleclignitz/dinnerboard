@@ -1,4 +1,5 @@
-// Wednesday job (runs before plan-draft/grocery-list): scrapes this week's
+// Fallback weekly ad source, run by fetch-weekly-ad.yml only when the Flipp
+// fetch (fetch-flipp-ad.mjs) fails: scrapes this week's
 // Tom Thumb weekly ad with a headless browser and writes a structured
 // summary to ads/current. The ad is served through a cross-origin Flipp
 // iframe widget - a plain fetch() can't see it, but Playwright's
@@ -19,13 +20,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
-import { getSupabase, getDoc, setDoc } from "./lib/supabaseClient.mjs";
+import { getSupabase, setDoc } from "./lib/supabaseClient.mjs";
 import { askClaude, parseClaudeJson } from "./lib/claude.mjs";
-import { loadSettings } from "./lib/settings.mjs";
+import { loadSettings, automationEnabled } from "./lib/settings.mjs";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const AD_URL = "https://www.tomthumb.com/weeklyad";
-let STORE_ADDRESS = process.env.TOM_THUMB_STORE_ADDRESS || "6333 E Mockingbird Ln"; // overridden by board Settings in main()
 const MIN_DEALS = 20;
 const FETCH_ATTEMPTS = 4;
 
@@ -131,7 +131,7 @@ async function structureDeals(labels) {
   };
 }
 
-async function scrapeAd() {
+async function scrapeAd(storeAddress) {
   const storageState = loadStorageState();
   if (!storageState) {
     return {
@@ -147,10 +147,10 @@ async function scrapeAd() {
     await page.goto(AD_URL, { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(3000);
     const bodyText = await page.locator("body").innerText().catch(() => "");
-    if (!bodyText.includes(STORE_ADDRESS)) {
+    if (!bodyText.includes(storeAddress)) {
       return {
         ok: false,
-        error: `Saved session didn't land on the expected store (looked for "${STORE_ADDRESS}"). It may have expired - re-run capture-tomthumb-session.mjs and update the TOM_THUMB_STORAGE_STATE secret.`
+        error: `Saved session didn't land on the expected store (looked for "${storeAddress}"). It may have expired - re-run capture-tomthumb-session.mjs and update the TOM_THUMB_STORAGE_STATE secret.`
       };
     }
 
@@ -164,7 +164,7 @@ async function scrapeAd() {
     }
     return {
       ok: true,
-      store: STORE_ADDRESS,
+      store: storeAddress,
       proteinDeals: structured.proteinDeals || [],
       deals: structured.deals || [],
       coupons: structured.coupons || []
@@ -176,20 +176,15 @@ async function scrapeAd() {
 
 async function main() {
   const supabase = getSupabase();
-
-  // Off by default: the board's "Turn on automation" button must set
-  // enabled:true before any processing or Anthropic calls happen here.
-  const automation = await getDoc(supabase, "settings/automation");
-  if (!automation || automation.enabled !== true) {
+  if (!(await automationEnabled(supabase))) {
     console.log("Automation is off (default). Skipping weekly ad fetch.");
     return;
   }
 
-  STORE_ADDRESS = (await loadSettings(supabase)).storeAddress;
-
+  const { storeAddress } = await loadSettings(supabase);
   let result;
   try {
-    result = await scrapeAd();
+    result = await scrapeAd(storeAddress);
   } catch (err) {
     console.error("Weekly ad fetch failed:", err);
     result = { ok: false, error: String((err && err.message) || err) };

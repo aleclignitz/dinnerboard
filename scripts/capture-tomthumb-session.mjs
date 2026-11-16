@@ -16,10 +16,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import readline from "node:readline/promises";
 import { chromium } from "playwright";
+import { resolveSettings } from "./lib/settings.mjs";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const OUTPUT_PATH = path.join(SCRIPT_DIR, "_tomthumb-storageState.json");
-const STORE_ADDRESS = process.env.TOM_THUMB_STORE_ADDRESS || "6333 E Mockingbird Ln";
+const { zip: ZIP, storeAddress: STORE_ADDRESS } = resolveSettings({});
 const BASE_DOMAIN = "tomthumb.com";
 // GitHub Actions secrets cap out around 48KB. The captured session also
 // picks up ~30 third-party ad-tracker cookies and large unrelated cached
@@ -51,7 +52,7 @@ try {
   console.log('1. Dismiss the cookie banner if present ("Continue with all" or similar).');
   console.log("2. Click the hamburger/navigation menu icon (top-left).");
   console.log("3. Click the store address button in the drawer that opens.");
-  console.log(`4. Enter zip code ${process.env.TOM_THUMB_ZIP || "75214"} and search.`);
+  console.log(`4. Enter zip code ${ZIP} and search.`);
   console.log(`5. Click "In Store" if needed, then click Select on "${STORE_ADDRESS}".`);
   await rl.question("Press Enter here once the store is selected > ");
 

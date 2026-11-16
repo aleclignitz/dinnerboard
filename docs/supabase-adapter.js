@@ -1,15 +1,15 @@
 /*
  * Supabase adapter for Dinner Board.
  *
- * The board (board/supper-board.html) only ever calls
- * window.claude.use("db") and window.claude.use("user"), then uses the
- * returned db.doc(path)/db.collection(path) with get/set/update/delete/
- * onSnapshot. This file implements that same shape on top of Supabase, so
- * the board's own code never needs to change. Each board "document" is one
- * row in the `documents` table, keyed by its path (e.g. "meals/abc123").
+ * The board (docs/index.html) only ever calls window.claude.use("db") and
+ * window.claude.use("user") - the interface of the original Claude-artifact
+ * Supper Board - then uses db.doc(path)/db.collection(path) with
+ * get/set/update/delete/onSnapshot. This file implements that shape on top
+ * of Supabase. Each board "document" is one row in the `documents` table,
+ * keyed by its path (e.g. "meals/abc123").
  *
- * Requires board/config.js (SUPABASE_CONFIG) and the Supabase JS CDN
- * script to be loaded first.
+ * Requires config.js (SUPABASE_CONFIG) and the Supabase JS CDN script to be
+ * loaded first.
  */
 (function () {
   "use strict";
@@ -42,8 +42,37 @@
     return res.data ? res.data.data : undefined;
   }
 
+  async function updateRow(path, data) {
+    var res = await client.from("documents").update({ data: data, updated_at: new Date().toISOString() }).eq("path", path);
+    if (res.error) throw res.error;
+  }
+
   function docSnap(path, data) {
     return { id: idOf(path), exists: data !== undefined, data: function () { return freeze(data); } };
+  }
+
+  // One realtime channel for the whole board. Each listener refetches only
+  // when a change touches its own document or collection (or when the
+  // changed path is unknown, to be safe).
+  var listeners = [];
+  var channel = null;
+  function listen(matches, push) {
+    var entry = { matches: matches, push: push };
+    listeners.push(entry);
+    if (!channel) {
+      channel = client.channel("documents")
+        .on("postgres_changes", { event: "*", schema: "public", table: "documents" }, function (payload) {
+          var row = (payload.new && payload.new.path) ? payload.new : payload.old;
+          var path = row && row.path;
+          listeners.forEach(function (l) { if (!path || l.matches(path)) l.push(); });
+        })
+        .subscribe();
+    }
+    push();
+    return function () {
+      listeners = listeners.filter(function (l) { return l !== entry; });
+      if (!listeners.length && channel) { client.removeChannel(channel); channel = null; }
+    };
   }
 
   function docRef(path) {
@@ -60,23 +89,16 @@
         if (current === undefined) throw new Error("Document does not exist: " + path);
         var next = freeze(current);
         mergeDeep(next, patch);
-        var res = await client.from("documents").update({ data: next, updated_at: new Date().toISOString() }).eq("path", path);
-        if (res.error) throw res.error;
+        await updateRow(path, next);
       },
       delete: async function () {
         var res = await client.from("documents").delete().eq("path", path);
         if (res.error) throw res.error;
       },
       onSnapshot: function (next, errCb) {
-        function push() { fetchRow(path).then(function (data) { next(docSnap(path, data)); }).catch(function (e) { if (errCb) errCb(e); }); }
-        push();
-        var channel = client.channel("doc:" + path)
-          .on("postgres_changes", { event: "*", schema: "public", table: "documents" }, function (payload) {
-            var row = (payload.new && payload.new.path) ? payload.new : payload.old;
-            if (row && row.path === path) push();
-          })
-          .subscribe();
-        return function () { client.removeChannel(channel); };
+        return listen(function (p) { return p === path; }, function () {
+          fetchRow(path).then(function (data) { next(docSnap(path, data)); }).catch(function (e) { if (errCb) errCb(e); });
+        });
       },
       collection: function (sub) { return colRef(path + "/" + sub); }
     };
@@ -84,10 +106,11 @@
 
   function colRef(path) {
     var prefix = path + "/";
+    function inCollection(p) { return p.indexOf(prefix) === 0 && p.slice(prefix.length).indexOf("/") === -1; }
     async function fetchAll() {
       var res = await client.from("documents").select("path,data").like("path", prefix + "%");
       if (res.error) throw res.error;
-      return (res.data || []).filter(function (r) { return r.path.slice(prefix.length).indexOf("/") === -1; });
+      return (res.data || []).filter(function (r) { return inCollection(r.path); });
     }
     function colSnap(rows) {
       var docs = rows.map(function (r) { return docSnap(r.path, r.data); });
@@ -99,12 +122,9 @@
       add: async function (data) { var ref = this.doc(); await ref.set(data); return ref; },
       get: async function () { return colSnap(await fetchAll()); },
       onSnapshot: function (next, errCb) {
-        function push() { fetchAll().then(function (rows) { next(colSnap(rows)); }).catch(function (e) { if (errCb) errCb(e); }); }
-        push();
-        var channel = client.channel("col:" + path)
-          .on("postgres_changes", { event: "*", schema: "public", table: "documents" }, push)
-          .subscribe();
-        return function () { client.removeChannel(channel); };
+        return listen(inCollection, function () {
+          fetchAll().then(function (rows) { next(colSnap(rows)); }).catch(function (e) { if (errCb) errCb(e); });
+        });
       }
     };
   }
@@ -135,8 +155,7 @@
       if (cur !== undefined) {
         var next = freeze(cur);
         next.status = "active"; next.pickup = ""; next.statusNote = ""; delete next.start; delete next.end;
-        var up = await client.from("documents").update({ data: next, updated_at: new Date().toISOString() }).eq("path", "plan/current");
-        if (up.error) throw up.error;
+        await updateRow("plan/current", next);
       }
     }
   };

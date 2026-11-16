@@ -1,31 +1,37 @@
-name: Wednesday grocery list
+name: Daily grocery list
 
 on:
   schedule:
-    # Builds the list at ~11:45 PM Wednesday America/Chicago, leaving the whole
-    # day to review the plan. Cron is UTC-only, so two runs cover CDT and CST;
-    # scripts/grocery-list.mjs skips whichever one is outside the 11 PM hour.
-    - cron: "45 4 * * 4"
-    - cron: "45 5 * * 4"
+    # Checks every night at ~11:45 PM America/Chicago, leaving the whole day to
+    # review the plan. Cron is UTC-only, so two runs cover CDT and CST;
+    # scripts/grocery-list.mjs skips whichever one is outside the 11 PM hour,
+    # and only builds the list the night before the board's configured
+    # delivery day (Settings tab), so this daily schedule works for any weekday.
+    - cron: "45 4 * * *"
+    - cron: "45 5 * * *"
   # Also started by the board's "Confirm plan & build list now" button.
   workflow_dispatch: {}
 
 jobs:
   grocery-list:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      PLAN_TIME_ZONE: America/Chicago
+      PLAN_GUIDELINES: ${{ vars.PLAN_GUIDELINES }}
+      PLAN_MAX_COOK_MINUTES: ${{ vars.PLAN_MAX_COOK_MINUTES }}
+      STORE_NAME: ${{ vars.STORE_NAME }}
+      ORDER_METHOD: ${{ vars.ORDER_METHOD }}
+      PICKUP_WINDOW: ${{ vars.PICKUP_WINDOW }}
+      SUBSTITUTION_RULES: ${{ vars.SUBSTITUTION_RULES }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
-      - run: npm install
+          node-version: 22
+          cache: npm
+      - run: npm ci
       - run: node scripts/grocery-list.mjs
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          STORE_NAME: ${{ vars.STORE_NAME }}
-          ORDER_METHOD: ${{ vars.ORDER_METHOD }}
-          PICKUP_WINDOW: ${{ vars.PICKUP_WINDOW }}
-          SUBSTITUTION_RULES: ${{ vars.SUBSTITUTION_RULES }}
-          PLAN_TIME_ZONE: America/Chicago

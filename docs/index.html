@@ -3,35 +3,29 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<style>
-:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-body{margin:0}
-img{max-width:100%}
-[hidden]{display:none!important}
-</style>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="config.js"></script>
-<script src="supabase-adapter.js"></script>
-</head>
-<body>
 <title>Dinner Board</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="supabase-adapter.js"></script>
 <style>
 /* Layout: one narrow phone column, tabbed by a bottom bar; meal details open in a bottom sheet. Palette: diner menu, tomato red and butter yellow on warm paper. Light only, by choice. */
 :root{
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
   --bg:#FBF4EA; --surface:#FFFCF6; --sunk:#F2E7D7; --ink:#2C1D15; --muted:#7A6354; --line:#E9D9C6;
   --basil:#B5322A; --basil-soft:#FBE4D9; --on-basil:#FFF8F0;
   --ice:#3A7194; --ice-soft:#E2EDF3;
   --honey:#A47604; --honey-soft:#FCEEC2; --star-off:#D6BFA0;
-  --danger:#A8382C;
+  --danger:#8C2620;
   --f-display:"Bricolage Grotesque","Avenir Next","Segoe UI",system-ui,sans-serif;
   --f-body:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",sans-serif;
   --r:14px; --nav-h:64px; color-scheme:light;
 }
 html,body{background:var(--bg)}
-body{color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.45;-webkit-font-smoothing:antialiased}
+body{margin:0;color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.45;-webkit-font-smoothing:antialiased}
+[hidden]{display:none!important}
 *{box-sizing:border-box}
 button,input{font:inherit;color:inherit}
 button{cursor:pointer}
@@ -45,7 +39,7 @@ h2{font-size:1.15rem;font-weight:700}
 .stack{display:flex;flex-direction:column;gap:12px}
 .section{display:flex;flex-direction:column;gap:10px;margin-top:28px}
 .section-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
-.view[hidden]{display:none!important}
+.hint{margin:0;font-size:.92rem}
 .checks{height:8px;border-radius:2px;margin-bottom:16px;background:repeating-conic-gradient(var(--basil) 0 25%,var(--surface) 0 50%) 0 0/8px 8px;opacity:.9}
 .topline{position:relative;display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin-bottom:16px}
 .planrange{font-size:.8rem;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
@@ -88,13 +82,13 @@ h2{font-size:1.15rem;font-weight:700}
 .sform label small{font-weight:400;color:var(--muted)}
 .sform input,.sform select,.sform textarea{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:10px 12px;min-height:44px;font:inherit;font-weight:400}
 .sform textarea{min-height:92px;resize:vertical}
-.steps{display:flex;flex-direction:column;gap:10px}
+.setup{display:flex;flex-direction:column;gap:10px}
 .step{display:flex;gap:12px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}
 .step .n{flex:none;width:26px;height:26px;border-radius:13px;display:grid;place-items:center;background:var(--sunk);font-weight:700;font-size:.85rem}
 .step.done .n{background:var(--basil);color:var(--on-basil)}
 .step .body{flex:1;display:flex;flex-direction:column;gap:6px}
 .step .body p{margin:0;font-size:.92rem}
-.btn.danger{background:#8C2620;color:#fff}
+.btn.danger{background:var(--danger);color:#fff}
 .bulk summary{cursor:pointer;font-weight:700;font-size:.92rem;padding:8px 0}
 .bulk .sform{margin-top:6px}
 
@@ -152,8 +146,9 @@ h2{font-size:1.15rem;font-weight:700}
 
 /* bottom nav */
 .nav{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
-.nav .in{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr)}
-.nav button{border:0;background:transparent;height:var(--nav-h);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:.75rem;font-weight:700;color:var(--muted);position:relative}
+.nav .in{max-width:560px;margin:0 auto;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr)}
+.nav button{border:0;background:transparent;height:var(--nav-h);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:0 2px;font-size:.75rem;font-weight:700;color:var(--muted);position:relative}
+@media (max-width:400px){.nav button{font-size:.68rem}}
 .nav button svg{width:22px;height:22px}
 .nav button[aria-current="page"]{color:var(--basil)}
 .nav .badge{position:absolute;top:8px;left:calc(50% + 6px);background:var(--honey);color:var(--surface);font-size:.65rem;min-width:18px;height:18px;border-radius:9px;display:grid;place-items:center;padding:0 5px;font-variant-numeric:tabular-nums}
@@ -197,7 +192,6 @@ h2{font-size:1.15rem;font-weight:700}
 .gro ul{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
 .gro li{padding:9px 14px;border-top:1px solid var(--line);overflow-wrap:anywhere;display:flex;align-items:center;justify-content:space-between;gap:10px}
 .gro li:first-child{border-top:0}
-.status a{color:inherit;font-weight:700}
 .copybox{width:100%;min-height:160px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);padding:10px 12px;font:inherit;font-size:.9rem}
 .push{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .push .lead{flex:1 1 100%;font-size:.92rem;color:var(--muted)}
@@ -208,6 +202,8 @@ h2{font-size:1.15rem;font-weight:700}
 .today-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:0}
 .today-grid>.tcol{min-width:0;display:flex;flex-direction:column}
 .days.upnext li:nth-child(n+4){display:none}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--nav-h) + 16px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;z-index:40;font-size:.92rem;max-width:calc(100% - 32px);text-align:center;display:flex;align-items:center;gap:14px}
+.toast button{border:0;background:transparent;color:var(--bg);font-weight:800;text-decoration:underline;text-underline-offset:3px;padding:4px 2px;min-height:32px}
 @media (min-width:960px){
   body{font-size:17px}
   .wrap{max-width:1280px;padding-inline:32px;padding-block:24px 40px}
@@ -232,16 +228,13 @@ h2{font-size:1.15rem;font-weight:700}
   .nav .fsbtn{display:flex;color:var(--muted)}
   .toast{bottom:calc(24px + env(safe-area-inset-bottom,0px))}
 }
-.toast{display:flex;align-items:center;gap:14px}
-.toast[hidden]{display:none}
-.toast button{border:0;background:transparent;color:var(--bg);font-weight:800;text-decoration:underline;text-underline-offset:3px;padding:4px 2px;min-height:32px}
-.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--nav-h) + 16px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;z-index:40;font-size:.92rem;max-width:calc(100% - 32px);text-align:center}
 @media (prefers-reduced-motion:no-preference){
   .sheet{animation:up .22s ease-out}
   @keyframes up{from{transform:translateY(30px);opacity:.4}to{transform:none;opacity:1}}
 }
 </style>
-
+</head>
+<body>
 <div class="wrap">
   <div class="checks" aria-hidden="true"></div>
   <div class="topline">
@@ -252,7 +245,7 @@ h2{font-size:1.15rem;font-weight:700}
     <div class="planrange" id="planRange"></div>
   </div>
 
-  <div id="dbNotice" class="notice" hidden>The shared plan can't load in this view. Open this page in Claude while signed in to see and edit it.</div>
+  <div id="dbNotice" class="notice" hidden>The shared plan can't load in this view. Check config.js and your connection, then reload.</div>
 
   <!-- TODAY -->
   <section class="view" id="v-today">
@@ -303,7 +296,7 @@ h2{font-size:1.15rem;font-weight:700}
     <div id="shopStatus" class="stack" style="margin-bottom:20px" hidden></div>
     <div class="section" style="margin-top:0">
       <div class="section-head"><h2>Next order</h2><span class="count" id="nextCount"></span></div>
-      <p class="muted" style="margin:0;font-size:.92rem">Anything here goes into the next grocery store order along with the new plan's groceries.</p>
+      <p class="muted hint">Anything here goes into the next grocery store order along with the new plan's groceries.</p>
       <form class="addform js-add-grocery" autocomplete="off">
         <input id="addGroceryShop" type="text" placeholder="Add an item" aria-label="Item to add to the next grocery order">
         <button class="btn" type="submit">Add</button>
@@ -312,13 +305,13 @@ h2{font-size:1.15rem;font-weight:700}
     </div>
     <div class="section" id="planGroWrap" hidden>
       <div class="section-head"><h2>Next plan's groceries</h2><span class="count" id="planGroRange"></span></div>
-      <p class="muted" style="margin:0;font-size:.92rem">Wednesday morning Claude combines these with the next-order list above into one list for Muse.</p>
+      <p class="muted hint">The night before delivery, Claude combines these with the next-order list above into one list for Muse.</p>
       <div><button type="button" class="btn small ghost" data-act="copy">Copy full order list</button></div>
       <div id="planGroDyn" class="stack"></div>
     </div>
     <div class="section">
       <div class="section-head"><h2>Staples</h2></div>
-      <p class="muted" style="margin:0;font-size:.92rem">Mark something Low and it joins the next order. Pantry items haven't been confirmed yet.</p>
+      <p class="muted hint">Mark something Low and it joins the next order. Pantry items haven't been confirmed yet.</p>
       <div id="staplesDyn" class="stack"></div>
       <form class="addform" id="stapleForm" autocomplete="off">
         <input id="addStaple" type="text" placeholder="e.g. Cumin" aria-label="New pantry staple">
@@ -345,10 +338,9 @@ h2{font-size:1.15rem;font-weight:700}
 
   <!-- DEALS -->
   <section class="view" id="v-deals" hidden>
-    <div id="dealsStatus" class="stack" style="margin-bottom:20px" hidden></div>
     <div class="section" style="margin-top:0">
       <div class="section-head"><h2>This week's deals</h2><span class="count" id="dealsRange"></span></div>
-      <p class="muted" style="margin:0;font-size:.92rem">From the weekly grocery store flyer. Tap Add to put an item on the next grocery order.</p>
+      <p class="muted hint">From the weekly grocery store flyer. Tap Add to put an item on the next grocery order.</p>
       <div id="dealsDyn" class="stack"></div>
     </div>
     <div class="section" id="couponsWrap" hidden>
@@ -361,7 +353,7 @@ h2{font-size:1.15rem;font-weight:700}
   <section class="view" id="v-feedback" hidden>
     <div class="section" style="margin-top:0">
       <div class="section-head"><h2>Requests for the next plan</h2></div>
-      <p class="muted" style="margin:0;font-size:.92rem">Meals to try, things to skip, busy nights coming up. Claude reads these before writing the next week.</p>
+      <p class="muted hint">Meals to try, things to skip, busy nights coming up. Claude reads these before writing the next week.</p>
       <form class="addform" id="ideaForm" autocomplete="off">
         <input id="addIdea" type="text" placeholder="e.g. more fish, nothing spicy on Tuesdays" aria-label="Request for the next meal plan">
         <button class="btn" type="submit">Add</button>
@@ -382,14 +374,18 @@ h2{font-size:1.15rem;font-weight:700}
   <section class="view" id="v-settings" hidden>
     <div class="section" style="margin-top:0">
       <div class="section-head"><h2>Get started</h2></div>
-      <div id="setupDyn" class="steps"></div>
+      <div id="setupDyn" class="setup"></div>
     </div>
     <div class="section">
       <div class="section-head"><h2>Settings</h2></div>
-      <p class="muted" style="margin:0;font-size:.92rem">Changes apply to the next weekly run. Leave a box empty to use the default.</p>
+      <p class="muted hint">Changes apply to the next weekly run. Leave a box empty to use the default.</p>
       <form class="sform" id="settingsForm" autocomplete="off">
         <label>First plan starts on<small>Nothing is planned before this date. Ignored once a plan exists.</small>
           <input id="setStart" type="date"></label>
+        <label>Plan day<small>Day of the week Claude drafts the next week's plan.</small>
+          <select id="setPlanDay"><option value="">Default (Wednesday)</option><option value="sunday">Sunday</option><option value="monday">Monday</option><option value="tuesday">Tuesday</option><option value="wednesday">Wednesday</option><option value="thursday">Thursday</option><option value="friday">Friday</option><option value="saturday">Saturday</option></select></label>
+        <label>Delivery day<small>Day groceries are delivered. The list is built the night before; cooking starts the day after.</small>
+          <select id="setDeliveryDay"><option value="">Default (Thursday)</option><option value="sunday">Sunday</option><option value="monday">Monday</option><option value="tuesday">Tuesday</option><option value="wednesday">Wednesday</option><option value="thursday">Thursday</option><option value="friday">Friday</option><option value="saturday">Saturday</option></select></label>
         <label>Plan guidelines<small>Tastes, diet, who you're feeding. Claude reads this when planning.</small>
           <textarea id="setGuide" placeholder="e.g. Family of four, no shellfish, kid-friendly weeknights"></textarea></label>
         <label>Longest cook time, minutes<input id="setMax" type="number" min="10" max="240" step="5" placeholder="45"></label>
@@ -404,7 +400,7 @@ h2{font-size:1.15rem;font-weight:700}
     </div>
     <div class="section">
       <div class="section-head"><h2>Reset</h2></div>
-      <p class="muted" style="margin:0;font-size:.92rem">Removes every meal from the Plan tab. Past meals and ratings are kept, and the next weekly run drafts a fresh plan.</p>
+      <p class="muted hint">Removes every meal from the Plan tab. Past meals and ratings are kept, and the next weekly run drafts a fresh plan.</p>
       <div><button type="button" class="btn danger small" data-act="clearPlan">Clear all planned meals</button></div>
     </div>
   </section>
@@ -453,7 +449,8 @@ h2{font-size:1.15rem;font-weight:700}
   </div>
   <div class="section" id="replaceWrap" hidden>
     <div class="section-head"><h2>Not feeling this one?</h2></div>
-    <p class="muted" style="font-size:.92rem;margin:0">Mark it and Claude swaps in a different meal before building the cart. A note saying what you'd rather have helps.</p>
+    <p class="muted hint">Claude picks a different meal right away and shows it here. Not what you wanted? Replace it again. Add a note to steer the pick.</p>
+    <input id="replaceNote" type="text" maxlength="120" placeholder="e.g. no fish, or a pork dish" aria-label="What you'd like instead (optional)" style="width:100%;margin:8px 0">
     <div id="replaceBtn"></div>
   </div>
   <div class="section" id="pushWrap">
@@ -462,7 +459,7 @@ h2{font-size:1.15rem;font-weight:700}
   </div>
   <div class="section" id="swapWrap">
     <div class="section-head"><h2>Trade places with another day</h2></div>
-    <p class="muted" style="font-size:.92rem;margin:0">Only these two meals change days. The thaw reminder moves with each meal.</p>
+    <p class="muted hint">Only these two meals change days. The thaw reminder moves with each meal.</p>
     <div class="swaplist" id="swapList"></div>
   </div>
 </div>
@@ -514,9 +511,15 @@ h2{font-size:1.15rem;font-weight:700}
   }
   function cycleDates(){
     const cur = S.meals.map(m=>m.date).sort(); if(!cur.length) return null;
-    const ns = addDays(cur[cur.length-1],1);
-    // One-week plans: drafted and the list built the day before the next week starts.
-    return {draft:addDays(ns,-1), cart:addDays(ns,-1), pickup:ns};
+    const start = addDays(cur[cur.length-1],1); // next plan's first cook night
+    const pickup = addDays(start,-1); // delivery date
+    const cart = addDays(pickup,-1); // grocery list is built the night before delivery
+    const DOW = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
+    const planDow = DOW.indexOf(((S.settings && S.settings.planDay) || "wednesday").toLowerCase());
+    // Most recent occurrence of the configured plan day on or before delivery.
+    let draft = pickup;
+    for(let i=0;i<7 && dateOf(draft).getDay()!==planDow;i++) draft = addDays(draft,-1);
+    return {draft, cart, pickup, start};
   }
   const short = k => fmt(k,{weekday:"short",month:"short",day:"numeric"});
   function statusHtml(where){
@@ -526,11 +529,11 @@ h2{font-size:1.15rem;font-weight:700}
     const note = p.statusNote ? '<span class="muted" style="font-size:.9rem">'+esc(p.statusNote)+'</span>' : "";
     if(st==="drafted"){
       const n = S.draft.filter(m=>m.swapOut).length;
-      return '<div class="status attn"><b>Next plan is ready to review</b><span>'+(range?range+". ":"")+'Mark anything you want replaced. The grocery list is built automatically at about 11:45 PM Wednesday, or confirm now to build it early.'+(n?' '+n+' meal'+(n>1?'s':'')+' marked to replace.':'')+'</span>'+note+
+      return '<div class="status attn"><b>Next plan is ready to review</b><span>'+(range?range+". ":"")+'Tap a meal to replace it with a new pick. The grocery list is built automatically the night before delivery, or confirm now to build it early.'+(n?' '+n+' meal'+(n>1?'s':'')+' being replaced.':'')+'</span>'+note+
         '<div class="row">'+(where!=="plan"?'<button type="button" class="btn small ghost" data-tab="plan">Review the plan</button>':'')+'<button type="button" class="btn small" data-act="buildNow">Confirm plan & build list now</button></div></div>';
     }
-    if(st==="approved") return '<div class="status"><b>Plan approved</b><span>Claude builds the grocery list at about 11:45 PM Wednesday'+(pickup?' for '+esc(pickup):'')+', or you can build it now.</span>'+note+'<div class="row"><button type="button" class="btn small" data-act="buildNow">Build the list now</button></div></div>';
-    if(st==="list_ready") return '<div class="status attn"><b>Your grocery store list is ready</b><span>Copy it and send it to Muse'+(d.orderDocUrl?', or point Muse to <a href="'+esc(d.orderDocUrl)+'" target="_blank" rel="noopener">this week\'s list in Google Drive</a>':'')+'. Once Muse has placed the order, tap I placed the order.</span>'+note+
+    if(st==="approved") return '<div class="status"><b>Plan approved</b><span>Claude builds the grocery list the night before delivery'+(pickup?' for '+esc(pickup):'')+', or you can build it now.</span>'+note+'<div class="row"><button type="button" class="btn small" data-act="buildNow">Build the list now</button></div></div>';
+    if(st==="list_ready") return '<div class="status attn"><b>Your grocery store list is ready</b><span>Copy it and send it to Muse. Once Muse has placed the order, tap I placed the order.</span>'+note+
       '<div class="row"><button type="button" class="btn small" data-act="copy">Copy list for Muse</button><button type="button" class="btn small ghost" data-act="ordered">I placed the order</button><button type="button" class="btn small ghost" data-act="buildNow">Rebuild list</button></div></div>';
     if(st==="cart_built") return '<div class="status attn"><b>Your grocery store cart is ready</b><span>Open the grocery store app, check the cart'+(pickup?' and the '+esc(pickup)+' pickup time':'')+', then place the order.</span>'+note+'<div class="row"><button type="button" class="btn small" data-act="ordered">I placed the order</button></div></div>';
     if(st==="ordered") return '<div class="status"><b>Order placed</b><span>'+(pickup?'Pickup '+esc(pickup)+'. ':'')+(d.prep?esc(d.prep):'')+'</span>'+note+'</div>';
@@ -557,7 +560,7 @@ h2{font-size:1.15rem;font-weight:700}
     const next = mealOn(addDays(m.date,1));
     let sub = chip(m.kind);
     if(m.kind==="cook") sub += '<span class="muted" style="font-size:.8rem">'+cookNo(m)+'</span>';
-    if(m.swapOut) sub += '<span class="chip replace">Replace</span>';
+    if(m.swapOut) sub += '<span class="chip replace">Replacing…</span>';
     if(m.rating) sub += starsHtml(m,true);
     const nn = notesFor(m.id).length; if(nn) sub += '<span class="muted" style="font-size:.8rem">'+nn+' note'+(nn>1?'s':'')+'</span>';
     if(next && next.thaw) sub += '<span class="thawline'+(next.thawDone?' done':'')+'">'+SNOW.replace('class="ico"','width="14" height="14"')+'Thaw tonight: '+esc(next.thaw)+'</span>';
@@ -601,7 +604,7 @@ h2{font-size:1.15rem;font-weight:700}
     if(dbState==="none"){ $("todayDyn").innerHTML = ""; $("nextUpWrap").hidden = true; return; }
     if(dbState==="pending"){ $("nextUpWrap").hidden = true; return; }
     const cyw = cycleDates();
-    $("cycleWide").textContent = cyw && status()==="active" && !S.draft.length ? "Next plan: draft "+short(cyw.draft)+" · list "+short(cyw.cart)+" · starts "+short(cyw.pickup) : "";
+    $("cycleWide").textContent = cyw && status()==="active" && !S.draft.length ? "Next plan: draft "+short(cyw.draft)+" · list "+short(cyw.cart)+" · delivery "+short(cyw.pickup)+" · starts "+short(cyw.start) : "";
     if(!S.loaded.meals){ return; }
     let h = automationHtml() + statusHtml("today");
     const tm = mealOn(t), tomorrow = mealOn(addDays(t,1));
@@ -669,15 +672,15 @@ h2{font-size:1.15rem;font-weight:700}
       h += '<div class="section"><div class="section-head"><h2>Next plan</h2><span class="muted" style="font-size:.85rem">'+(status()==="drafted"?"Proposed":"Approved")+'</span></div>'+
         (d.summary?'<p class="muted" style="margin:0">'+esc(d.summary)+'</p>':'')+
         (d.prep?'<p class="cycle">'+esc(d.prep)+'</p>':'')+
-        (status()==="drafted"?'<p class="cycle">Tap a meal to see its recipe or mark it to replace.</p>':'')+'</div>';
+        (status()==="drafted"?'<p class="cycle">Tap a meal to see its recipe or replace it.</p>':'')+'</div>';
       h += blockHtml(nx, "Next plan", t, false);
     } else if(cy && status()==="active"){
-      h += '<div class="section"><div class="section-head"><h2>Next plan</h2></div><p class="cycle">Claude drafts it '+short(cy.draft)+' and finalizes the grocery list '+short(cy.cart)+' for the week starting '+short(cy.pickup)+'.</p></div>';
+      h += '<div class="section"><div class="section-head"><h2>Next plan</h2></div><p class="cycle">Claude drafts it '+short(cy.draft)+', finalizes the grocery list '+short(cy.cart)+' for delivery '+short(cy.pickup)+', and the plan starts '+short(cy.start)+'.</p></div>';
     }
     $("planDyn").innerHTML = h + clearBtn;
   }
 
-  const SET_IDS = {startDate:"setStart", planGuidelines:"setGuide", maxCookMinutes:"setMax", storeName:"setStore", orderMethod:"setOrder", pickupWindow:"setWindow", substitutionRules:"setSubs", zip:"setZip", storeAddress:"setAddr"};
+  const SET_IDS = {startDate:"setStart", planDay:"setPlanDay", deliveryDay:"setDeliveryDay", planGuidelines:"setGuide", maxCookMinutes:"setMax", storeName:"setStore", orderMethod:"setOrder", pickupWindow:"setWindow", substitutionRules:"setSubs", zip:"setZip", storeAddress:"setAddr"};
   let settingsDirty = false;
   const DRAFT_FRESH_MS = 20*60000;
   const draftBusy = () => !!(S.planDraft && (S.planDraft.status==="requested"||S.planDraft.status==="running") && Date.now()-Date.parse(S.planDraft.updatedAt||0) < DRAFT_FRESH_MS);
@@ -699,7 +702,8 @@ h2{font-size:1.15rem;font-weight:700}
       '<p class="muted">'+(hasRecipes ? n+' recipes are loaded from the recipe box and ready for planning.' : 'No recipes found yet. Load your recipe dataset with scripts/load-recipes.mjs (see the README), then refresh this page.')+'</p>'+draftMsg+
       '<div><button type="button" class="btn small ghost" data-act="manualDraft"'+(draftBusy()?' disabled':'')+'>Manually fetch weekly recipes from recipe box</button></div>');
     h += step(2,hasStart,"Pick a start date",'<p class="muted">'+(hasStart ? 'The first plan starts on '+esc(fmt(S.settings.startDate,{weekday:"long",month:"long",day:"numeric"}))+'.' : 'Choose when planning begins in the settings below, then Save. If you skip this, the first plan starts tomorrow.')+'</p>');
-    h += step(3,on,"Turn on automation",'<p class="muted">'+(on ? 'Automation is on. Weekly jobs run on Wednesday mornings, planning Thursday through the following Wednesday. They only call Anthropic while this is on.' : 'Off by default so nothing runs (or costs anything) until you are ready.')+'</p>'+
+    const planDayLabel = cap((S.settings && S.settings.planDay) || "wednesday"), deliveryDayLabel = cap((S.settings && S.settings.deliveryDay) || "thursday");
+    h += step(3,on,"Turn on automation",'<p class="muted">'+(on ? 'Automation is on. Claude drafts the plan every '+planDayLabel+'; groceries are delivered every '+deliveryDayLabel+' and cooking starts the day after. They only call Anthropic while this is on.' : 'Off by default so nothing runs (or costs anything) until you are ready.')+'</p>'+
       '<div><button type="button" class="btn small'+(on?' ghost':'')+'" data-act="automation">'+(on?'Turn off automation':'Turn on automation')+'</button></div>');
     $("setupDyn").innerHTML = h;
   }
@@ -738,7 +742,22 @@ h2{font-size:1.15rem;font-weight:700}
     }
   }
 
-  // Confirms the plan and builds the grocery list now instead of waiting for 11:59 PM Wednesday.
+  // Marks a proposed meal for replacement and starts the workflow that swaps it in now.
+  async function replaceMeal(m){
+    if(!db || readOnly){ toast("You can view this plan but not change it."); return; }
+    if(!(S.automation && S.automation.enabled === true)){ toast("Turn on automation in Settings first."); return; }
+    const note = ($("replaceNote").value || "").trim();
+    if(!(await save(()=>mref(m).update({swapOut:true, swapNote:note})))) return;
+    try{
+      await window.dinnerboard.startWorkflow("replace-meal");
+      toast("Finding a replacement. It shows up here in a minute or two.");
+    }catch(e){
+      await mref(m).update({swapOut:false}).catch(()=>{});
+      toast("Couldn't start the replacement. Check that the dispatch function is up to date (see the README).");
+    }
+  }
+
+  // Confirms the plan and builds the grocery list now instead of waiting for the night before delivery.
   async function buildNow(){
     if(!db || readOnly){ toast("You can view this plan but not change it."); return; }
     if(!(S.automation && S.automation.enabled === true)){ toast("Turn on automation in Settings first."); return; }
@@ -800,7 +819,7 @@ h2{font-size:1.15rem;font-weight:700}
     $("nextListWide").innerHTML = $("nextList").innerHTML;
     const fz = S.freezer.slice().sort((a,b)=>(a.at||"")<(b.at||"")?-1:1);
     $("freezerDyn").innerHTML = fz.length
-      ? '<ul class="list">'+fz.map(f=>'<li><span class="txt">'+esc(f.name)+(f.forMeal?' <span class="tag">· '+esc(f.forMeal)+'</span>':'')+'</span><button type="button" class="btn small ghost" data-act="delFreezer" data-id="'+esc(f.id)+'">Used</button><button type="button" class="iconbtn" data-act="removeFreezer" data-id="'+esc(f.id)+'" aria-label="Remove '+esc(f.name)+'">'+X+'</button></li>').join("")+'</ul>'
+      ? '<ul class="list">'+fz.map(f=>'<li><span class="txt">'+esc(f.name)+(f.forMeal?' <span class="tag">· '+esc(f.forMeal)+'</span>':'')+'</span><button type="button" class="btn small ghost" data-act="delFreezer" data-id="'+esc(f.id)+'">Used</button><button type="button" class="iconbtn" data-act="delFreezer" data-id="'+esc(f.id)+'" aria-label="Remove '+esc(f.name)+'">'+X+'</button></li>').join("")+'</ul>'
       : '<div class="empty">Freezer list is empty.</div>';
     $("freezerWide").innerHTML = $("freezerDyn").innerHTML;
   }
@@ -942,7 +961,12 @@ h2{font-size:1.15rem;font-weight:700}
     $("sheetNotes").innerHTML = ns.length ? ns.map(n=>'<li><span class="txt">'+esc(n.text)+(n.at?'<time>'+new Date(n.at).toLocaleDateString("en-US",{month:"short",day:"numeric"})+'</time>':'')+'</span><button type="button" class="iconbtn" data-act="delNote" data-id="'+esc(n.id)+'" aria-label="Delete note">'+X+'</button></li>').join("") : '<li class="muted" style="background:transparent;padding-left:0">No notes yet.</li>';
     const fixed = m.date<today() || proposed(m) || m._col==="history";
     $("replaceWrap").hidden = !proposed(m);
-    $("replaceBtn").innerHTML = proposed(m) ? '<button type="button" class="btn small'+(m.swapOut?'':' ghost')+'" data-act="swapout" data-id="'+esc(m.id)+'" aria-pressed="'+(!!m.swapOut)+'">'+(m.swapOut?'Marked to replace. Tap to keep it':'Replace this meal')+'</button>' : "";
+    const rn = $("replaceNote");
+    if(rn.dataset.mid !== m.id){ rn.value = m.swapNote || ""; rn.dataset.mid = m.id; }
+    rn.disabled = !!m.swapOut;
+    $("replaceBtn").innerHTML = proposed(m) ? (m.swapOut
+      ? '<button type="button" class="btn small" disabled>Finding a replacement…</button> <button type="button" class="btn small ghost" data-act="swapout" data-id="'+esc(m.id)+'">Try again</button>'
+      : '<button type="button" class="btn small" data-act="swapout" data-id="'+esc(m.id)+'">Replace this meal</button>') : "";
     $("pushWrap").hidden = fixed;
     $("pushBtns").innerHTML = fixed ? "" : pushHtml(m,false);
     const others = meals().filter(x=>x.id!==m.id && x.date>=today() && !proposed(x));
@@ -1015,8 +1039,7 @@ h2{font-size:1.15rem;font-weight:700}
     else if(act==="tick"){ const k = b.dataset.k; if(checked.has(k)) checked.delete(k); else checked.add(k); renderSheet(); }
     else if(act==="rate"){ const m = findMeal(id); if(!m) return; const v = +b.dataset.v; save(()=>mref(m).update({rating: m.rating===v ? 0 : v}), "Rating saved"); }
     else if(act==="thaw"){ const m = findMeal(id); if(m) save(()=>mref(m).update({thawDone:true}), "Marked as thawing"); }
-    else if(act==="swapout"){ const m = findMeal(id); if(m) save(()=>mref(m).update({swapOut: !m.swapOut}), m.swapOut ? "Keeping it" : "Marked to replace"); }
-    else if(act==="approve") save(()=>db.doc("plan/current").update({status:"approved", approvedAt:new Date().toISOString()}), "Plan approved");
+    else if(act==="swapout"){ const m = findMeal(id); if(m) replaceMeal(m); }
     else if(act==="ordered") save(async()=>{
         const inc = (S.dplan && S.dplan.included) || {};
         for(const g of (inc.grocery||[])) if(S.grocery.find(x=>x.id===g)) await db.doc("grocery/"+g).delete();
@@ -1039,7 +1062,6 @@ h2{font-size:1.15rem;font-weight:700}
         name+" added to pantry");
     }
     else if(act==="delFreezer") save(()=>db.doc("freezer/"+id).delete(), "Removed from the freezer list");
-    else if(act==="removeFreezer") save(()=>db.doc("freezer/"+id).delete(), "Removed from the freezer list");
     else if(act==="addDeal"){
       const name = b.dataset.name.trim(); if(!name) return;
       if(S.grocery.find(x=>String(x.text||"").trim().toLowerCase()===name.toLowerCase())){ toast("Already on the list"); return; }
@@ -1049,22 +1071,17 @@ h2{font-size:1.15rem;font-weight:700}
   });
   document.addEventListener("keydown", e=>{ if(e.key==="Escape" && openId) closeSheet(); });
 
-  document.querySelectorAll(".js-add-grocery").forEach(f=>f.addEventListener("submit", async e=>{
-    e.preventDefault(); const inp = f.querySelector("input"); const text = inp.value.trim(); if(!text) return;
-    if(await save(()=>db.collection("grocery").add({text, at:new Date().toISOString()}), "Added to the next order")) inp.value = "";
-  }));
-  $("noteForm").addEventListener("submit", async e=>{
-    e.preventDefault(); const text = $("noteInput").value.trim(); if(!text || !openId) return;
-    if(await save(()=>db.collection("notes").add({meal:openId, text, at:new Date().toISOString()}), "Note saved")) $("noteInput").value = "";
+  // Wires a one-box add form: saves the trimmed text, then clears the box.
+  const onAdd = (form, input, add, ok) => form.addEventListener("submit", async e=>{
+    e.preventDefault(); const text = input.value.trim(); if(!text) return;
+    if(await save(()=>add(text), ok)) input.value = "";
   });
-  $("ideaForm").addEventListener("submit", async e=>{
-    e.preventDefault(); const text = $("addIdea").value.trim(); if(!text) return;
-    if(await save(()=>db.collection("ideas").add({text, at:new Date().toISOString()}), "Request saved")) $("addIdea").value = "";
-  });
-  $("freezerForm").addEventListener("submit", async e=>{
-    e.preventDefault(); const name = $("addFreezer").value.trim(); if(!name) return;
-    if(await save(()=>db.collection("freezer").add({name, at:new Date().toISOString()}), "Added to the freezer list")) $("addFreezer").value = "";
-  });
+  const now = () => new Date().toISOString();
+  document.querySelectorAll(".js-add-grocery").forEach(f=>onAdd(f, f.querySelector("input"), text=>db.collection("grocery").add({text, at:now()}), "Added to the next order"));
+  onAdd($("noteForm"), $("noteInput"), text=>db.collection("notes").add({meal:openId, text, at:now()}), "Note saved");
+  onAdd($("ideaForm"), $("addIdea"), text=>db.collection("ideas").add({text, at:now()}), "Request saved");
+  onAdd($("freezerForm"), $("addFreezer"), name=>db.collection("freezer").add({name, at:now()}), "Added to the freezer list");
+  onAdd($("stapleForm"), $("addStaple"), name=>db.collection("staples").add({name, group:"Pantry", status:"have", order: S.staples.length}), "Added to staples");
   $("stapleBulkForm").addEventListener("submit", async e=>{
     e.preventDefault();
     const seen = new Set(S.staples.map(s=>String(s.name||"").trim().toLowerCase()));
@@ -1081,10 +1098,6 @@ h2{font-size:1.15rem;font-weight:700}
       for(let i=0;i<names.length;i++) await db.collection("staples").add({name:names[i], group:"Pantry", status:"have", order: base+i});
     }, "Added "+names.length+" staple"+(names.length===1?"":"s")+(skipped?" ("+skipped+" skipped)":""));
     if(ok) $("bulkStaples").value = "";
-  });
-  $("stapleForm").addEventListener("submit", async e=>{
-    e.preventDefault(); const name = $("addStaple").value.trim(); if(!name) return;
-    if(await save(()=>db.collection("staples").add({name, group:"Pantry", status:"have", order: S.staples.length}), "Added to staples")) $("addStaple").value = "";
   });
 
   $("settingsForm").addEventListener("input", ()=>{ settingsDirty = true; });

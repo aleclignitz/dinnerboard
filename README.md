@@ -17,13 +17,15 @@ The original project runs entirely inside a Claude artifact. This version uses i
 
 ## Weekly workflow
 
-The ad publishes early Wednesday, so the ad fetch and plan draft run Wednesday morning (America/Chicago) and the grocery list is built at the end of the day, planning the **week that starts Thursday and ends the following Wednesday**. Short extra plan-draft runs on Thursday and Friday at 7:00 AM only promote that week to the live plan (no Anthropic calls). Every job first checks `settings/automation.enabled` in Supabase, which the **Settings** tab's automation switch sets. It is **off by default**, and when off no job calls Anthropic.
+Two board **Settings** control the weekly cadence: **Plan day** (default Wednesday) is the day Claude drafts next week's plan, and **Delivery day** (default Thursday) is the day groceries arrive. The grocery list is always built the night before delivery, and the plan's first cook night is always the day after delivery (so there's time to put things away before cooking). The Tom Thumb ad fetch stays fixed to Wednesday morning regardless of these settings, since that's when the ad actually publishes. `plan-draft.yml` and `grocery-list.yml` now run **daily** and check these settings themselves, so changing either day only requires editing Settings on the board, not the GitHub Actions cron schedules. Every job first checks `settings/automation.enabled` in Supabase, which the **Settings** tab's automation switch sets. It is **off by default**, and when off no job calls Anthropic.
 
 | Time (CDT) | Workflow | What happens | Anthropic calls |
 |---|---|---|---|
-| 6:00 AM | `fetch-weekly-ad.yml` | Fetches this week's Tom Thumb ad and writes it to `ads/current` | Optional coupon cleanup (1 call), or about 4 if the fallback scraper runs |
-| 7:00 AM | `plan-draft.yml` | Promotes a due draft, then writes next week's plan (Thursday through Wednesday) with sale-biased protein picks | 1 plan call, then 1 to 3 review calls per cook night |
-| ~11:45 PM | `grocery-list.yml` | Applies swaps, merges ingredients, builds the grocery list and coupons-to-clip, or builds it earlier when you press **Confirm plan & build list now** | 1 pantry-trim call, plus 1 to 3 review calls per swapped meal |
+| 6:00 AM | `fetch-weekly-ad.yml` | Fetches this week's Tom Thumb ad and writes it to `ads/current` (always Wednesday) | Optional coupon cleanup (1 call), or about 4 if the fallback scraper runs |
+| 7:00 AM daily | `plan-draft.yml` | Promotes a due draft every day; on the configured **plan day** also writes next week's plan (delivery day + 1 through 6 days later) with sale-biased protein picks | 1 plan call, then 1 to 3 review calls per cook night |
+| ~11:45 PM daily | `grocery-list.yml` | On the night before the configured **delivery day**, applies swaps, merges ingredients, and builds the grocery list and coupons-to-clip (or builds it earlier when you press **Confirm plan & build list now**) | 1 pantry-trim call, plus 1 to 3 review calls per swapped meal |
+
+For example, to plan on Friday with delivery on Saturday (and cooking starting Sunday), set **Plan day** to Friday and **Delivery day** to Saturday on the Settings tab.
 
 ### 1. Weekly ad (6:00 AM)
 
@@ -42,23 +44,23 @@ ads/current = { ok: false, error }   (job fails; the plan still runs without sal
 - **Fallback: Playwright** ([scripts/fetch-weekly-ad.mjs](scripts/fetch-weekly-ad.mjs)). It runs only if Flipp fails (Chromium is installed only then). It opens tomthumb.com with a saved session, reads the ad tiles, and has Claude turn the raw text into structured JSON in batches of 60. See [Fallback scraper](#fallback-scraper-playwright).
 - **Safeguards:** a newer Flipp flyer is never replaced by an older one. If a fetch fails and the existing `ads/current` is still unexpired, it is kept. Otherwise `ok: false` is written, so expired deals are never used silently.
 
-### 2. Plan draft (7:00 AM) - [scripts/plan-draft.mjs](scripts/plan-draft.mjs)
+### 2. Plan draft (7:00 AM, plan day) - [scripts/plan-draft.mjs](scripts/plan-draft.mjs)
 
-1. **Claude** drafts the one-week skeleton for Thursday dinner through the following Wednesday: dates, night type, and a target protein per cook night (using sale proteins from `ads/current` when `ok`). The default rhythm is cook Thu/Sat/Mon, leftovers the next day, and a flexible Wednesday. Plans are one week because the weekly ad's fresh produce and sales don't last longer; guidelines can override the rhythm. Meals Claude dates outside the week are dropped.
+1. **Claude** drafts the one-week skeleton starting the day after delivery: dates, night type, and a target protein per cook night (using sale proteins from `ads/current` when `ok`). The default rhythm is cook every other night with leftovers between, and a flexible last night. Plans are one week because the weekly ad's fresh produce and sales don't last longer; guidelines can override the rhythm. Meals Claude dates outside the week are dropped.
 2. For each cook night, [scripts/lib/recipePicker.mjs](scripts/lib/recipePicker.mjs) picks a recipe (see [How recipes get picked](#how-recipes-get-picked)): a deterministic Supabase query, then a **Claude** review of the shortlist.
 3. The plan is saved as a draft on the board for review.
 
 ### 3. Review window and grocery list - [scripts/grocery-list.mjs](scripts/grocery-list.mjs)
 
-The draft appears at about 7:00 AM Wednesday, so you have **until about 11:45 PM Wednesday (about 17 hours)** to review it, mark meals to replace, and add quick-add groceries. The list is then built automatically. (GitHub cron only speaks UTC, so two runs are scheduled to cover daylight saving time; the one outside the 11 PM Chicago hour skips itself, and a second run never rebuilds a finished list.) Approval is not required: an unapproved plan is still built, with a note.
+The draft appears at about 7:00 AM on the configured plan day, so you have until about 11:45 PM the night before delivery to review it, replace meals you don't want (optionally with a note like "no fish"; the new recipe shows in the plan within a minute or two, and you can replace it again), and add quick-add groceries. The list is then built automatically. (GitHub cron only speaks UTC, so two runs are scheduled to cover daylight saving time; the one outside the 11 PM Chicago hour skips itself, and a second run never rebuilds a finished list.) Approval is not required: an unapproved plan is still built, with a note.
 
 To build it sooner, press **Confirm plan & build list now** on the Plan or Tonight tab. That approves the plan and starts the list immediately (it appears in a minute or two, ready for **Copy list for Muse**). **Rebuild list** does the same again if you change something afterwards. These buttons need the dispatch function below, and automation turned on.
 
 What the list job does:
 
-1. Finalizes any meal swaps. Replacements go through the same picker and Claude review.
+1. Finalizes any meal still marked for replacement (normally already done by the **Replace** button, which runs the replace-meal workflow). Replacements go through the same picker and Claude review.
 2. Merges all recipe ingredients, then **Claude** trims the list against your staples and freezer so you only buy what's missing.
-3. Adds sale deals and coupons-to-clip from `ads/current`, then saves the list to the board.
+3. Adds quick adds, low staples and coupons-to-clip from `ads/current`, then saves the list to the board.
 
 ### Anthropic usage summary
 
@@ -76,49 +78,67 @@ All calls go through [scripts/lib/claude.mjs](scripts/lib/claude.mjs). The model
 ## Repo layout
 
 ```
-board/                      The board's UI, Supabase config, and Supabase adapter
-docs/                       Generated static site served by GitHub Pages
-tools/build_board.py        Rebuilds docs/ from board/
-tools/import_recipes.py     Converts an nyt-cooking-parser sqlite export into staging JSON
+docs/                       The board, served as-is by GitHub Pages (no build step)
+  index.html                  UI: markup, styles and script in one file
+  config.js                   Supabase URL + publishable key
+  supabase-adapter.js         Board <-> Supabase bridge, sign-in gate, realtime
 sql/schema.sql              `documents` + `recipes` tables, Row Level Security, realtime
-scripts/fetch-flipp-ad.mjs  Primary ad source: Flipp JSON -> ads/current
-scripts/fetch-weekly-ad.mjs Fallback ad source: Playwright scraper + Claude
-scripts/capture-tomthumb-session.mjs  Manual: saves a Tom Thumb browser session for the fallback
-scripts/plan-draft.mjs      Writes the next one-week plan
-scripts/grocery-list.mjs    Finalizes swaps and builds the grocery list
-scripts/load-recipes.mjs    Loads the fixed recipe dataset into Supabase (one-time/occasional, local only)
-supabase/functions/dispatch-workflow/  Edge function that starts plan-draft and grocery-list for the board
-scripts/lib/settings.mjs   Board Settings > env var > default resolution
-scripts/lib/                flipp.mjs, recipePicker.mjs, claude.mjs, supabaseClient.mjs
-test/flipp.test.mjs         Unit tests for the Flipp source (no network)
-.github/workflows/          Weekly jobs, plus a manual Flipp validation workflow
+supabase/functions/dispatch-workflow/  Edge function the board uses to start allow-listed workflows
+scripts/                    One entry script per job (all run by GitHub Actions unless noted)
+  fetch-flipp-ad.mjs          Primary ad source: Flipp JSON -> ads/current
+  fetch-weekly-ad.mjs         Fallback ad source: Playwright scraper + Claude
+  plan-draft.mjs              Promotes a due draft; drafts the next one-week plan
+  replace-meal.mjs            Swaps in new recipes for meals marked Replace
+  grocery-list.mjs            Finalizes swaps and builds the grocery list
+  capture-tomthumb-session.mjs  Local: saves a Tom Thumb browser session for the fallback
+  load-recipes.mjs            Local: loads the recipe dataset into Supabase
+  rebuild-grocery-list.mjs    Local recovery: rebuilds the list for the active plan
+  dev-test-picker.mjs         Local smoke test for the recipe picker
+scripts/lib/                Shared logic, one owner per concern:
+  supabaseClient.mjs          Document reads/writes (same path model as the board)
+  settings.mjs                Board Settings > env var > default; the automation switch
+  planWindow.mjs              Dates, time zone, plan week and schedule windows
+  recipePicker.mjs            Dataset query + Claude review, free-form fallback (pickRecipe)
+  replaceMeals.mjs            Replacing meals marked swapOut
+  groceryList.mjs             Pantry trim + order text (buildOrder)
+  flipp.mjs                   Flipp client and ad normalizer
+  claude.mjs                  Claude Messages API wrapper + JSON parsing
+tools/import_recipes.py     Converts an nyt-cooking-parser sqlite export into staging JSON
+test/                       Unit tests (Node's built-in runner, no network)
+.github/workflows/          Scheduled jobs, replace-meal, and Tests (runs on every push)
 ```
+
+### Design notes
+
+- **One data model everywhere.** Every board document is a row in `documents` keyed by a `collection/id` path. The board (through the adapter) and the scripts (through `supabaseClient.mjs`) read and write the same paths, so there is no separate API layer.
+- **The board is a single static page.** `docs/index.html` is edited directly. It keeps the original Supper Board's `window.claude.use("db")` interface, which `supabase-adapter.js` implements on Supabase. The adapter keeps one realtime channel and only refetches the document or collection that actually changed.
+- **Scripts are thin.** Each entry script decides *whether* to run (automation switch, schedule window, plan status) and delegates the work to `scripts/lib`. Shared rules live in exactly one place: settings precedence and the automation gate (`settings.mjs`), dates and time zone (`planWindow.mjs`), recipe choice (`pickRecipe`), and the order list (`buildOrder`).
+- **Settings live on the board.** Actions variables are only fallbacks, and secrets never live in Supabase documents.
 
 ## Setup
 
 1. **Supabase:** create a project, run [sql/schema.sql](sql/schema.sql) in the SQL editor, and enable realtime for `documents` (Database → Replication).
-2. **Keys:** put the project URL and **publishable key** (`sb_publishable_...`) in [board/config.js](board/config.js); it is safe to commit because RLS restricts it. Keep the **secret key** (`sb_secret_...`) out of the repo; it goes only in Actions secrets and your local `.env`.
-3. **Build the site:** run `python tools/build_board.py` whenever `board/` changes, and commit `docs/`.
-4. **GitHub Pages:** Settings → Pages → Deploy from branch → `main` / `docs`.
-5. **Actions secrets** (Settings → Secrets and variables → Actions): `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `ANTHROPIC_API_KEY`, and `TOM_THUMB_STORAGE_STATE` (fallback scraper only).
-6. **Settings are on the board, not in GitHub.** Planning guidelines, cook-time limit, store, order method, pickup window, substitutions, ZIP, store address and the first-plan start date are edited from the board's **Settings** tab (see below). The optional Actions variables `PLAN_GUIDELINES`, `PLAN_MAX_COOK_MINUTES`, `STORE_NAME`, `ORDER_METHOD`, `PICKUP_WINDOW`, `SUBSTITUTION_RULES`, `TOM_THUMB_ZIP` and `TOM_THUMB_STORE_ADDRESS` still work as defaults; anything saved on the board wins.
-7. **Deploy the dispatch function** (enables the board's "Manually fetch weekly recipes from recipe box" and "Confirm plan & build list now" buttons; redeploy it after pulling updates). One time, with the [Supabase CLI](https://supabase.com/docs/guides/cli):
+2. **Keys:** put the project URL and **publishable key** (`sb_publishable_...`) in [docs/config.js](docs/config.js); it is safe to commit because RLS restricts it. Keep the **secret key** (`sb_secret_...`) out of the repo; it goes only in Actions secrets and your local `.env`.
+3. **GitHub Pages:** Settings → Pages → Deploy from branch → `main` / `docs`. The site has no build step: edit `docs/` and commit.
+4. **Actions secrets** (Settings → Secrets and variables → Actions): `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `ANTHROPIC_API_KEY`, and `TOM_THUMB_STORAGE_STATE` (fallback scraper only).
+5. **Settings are on the board, not in GitHub.** Planning guidelines, cook-time limit, store, order method, pickup window, substitutions, ZIP, store address, the plan day, the delivery day and the first-plan start date are edited from the board's **Settings** tab (see below). The optional Actions variables `PLAN_GUIDELINES`, `PLAN_MAX_COOK_MINUTES`, `STORE_NAME`, `ORDER_METHOD`, `PICKUP_WINDOW`, `SUBSTITUTION_RULES`, `TOM_THUMB_ZIP`, `TOM_THUMB_STORE_ADDRESS`, `PLAN_DAY` and `DELIVERY_DAY` still work as defaults; anything saved on the board wins.
+6. **Deploy the dispatch function** (enables the board's "Manually fetch weekly recipes from recipe box", "Replace this meal" and "Confirm plan & build list now" buttons; redeploy it after pulling updates). One time, with the [Supabase CLI](https://supabase.com/docs/guides/cli):
 
    ```
    supabase functions deploy dispatch-workflow --no-verify-jwt
    supabase secrets set GH_REPO=<your-user>/dinnerboard GH_DISPATCH_TOKEN=<token>
    ```
 
-   The token is a fine-grained GitHub personal access token limited to this repository with **Actions: Read and write**. It lives only in Supabase secrets, never in the repo or the browser. The function checks the caller's Supabase sign-in and can only start the `plan-draft` and `grocery-list` workflows. Without it, run **Wednesday plan draft** from the Actions tab instead.
-8. **Sign in** once on the deployed board via the magic-link prompt.
-9. **Open the Settings tab** and follow **Get started** (below). No database seeding is needed.
-10. **Test manually** with Actions → workflow_dispatch before waiting on the schedule. The **Fetch weekly ad (Flipp, validation)** workflow defaults to a dry run that writes nothing.
+   The token is a fine-grained GitHub personal access token limited to this repository with **Actions: Read and write**. It lives only in Supabase secrets, never in the repo or the browser. The function checks the caller's Supabase sign-in and can only start `plan-draft.yml`, `replace-meal.yml` and `grocery-list.yml`. Without it, run those workflows from the Actions tab instead.
+7. **Sign in** once on the deployed board via the magic-link prompt.
+8. **Open the Settings tab** and follow **Get started** (below). No database seeding is needed.
+9. **Test manually** with Actions → workflow_dispatch before waiting on the schedule. **Weekly ad fetch** has a **Dry run** checkbox that fetches from Flipp and writes nothing.
 
 ## First use and the Settings tab
 
 The board's **Settings** tab replaces manual database seeding:
 
-1. **Load your recipes:** the `recipes` table is a fixed, read-only dataset - Claude never writes to it. Load it once (or add more later) with `tools/import_recipes.py` + `scripts/load-recipes.mjs` (see **Recipe dataset** below). The Settings tab shows how many recipes are loaded, and **Manually fetch weekly recipes from recipe box** lets you draft this week's plan from that dataset on demand instead of waiting for the Wednesday schedule.
+1. **Load your recipes:** the `recipes` table is a fixed, read-only dataset - Claude never writes to it. Load it once (or add more later) with `tools/import_recipes.py` + `scripts/load-recipes.mjs` (see **Recipe dataset** below). The Settings tab shows how many recipes are loaded, and **Manually fetch weekly recipes from recipe box** lets you draft this week's plan from that dataset on demand instead of waiting for the plan day.
 2. **Pick a start date:** nothing is planned before it. Leave it blank to start tomorrow. It only affects the first plan.
 3. **Turn on automation:** off by default, so nothing runs or costs anything until you switch it on.
 
@@ -132,6 +152,8 @@ Staples and freezer items are managed on the Shopping tab; there is no need to i
 ```
 npm test                              # unit tests (Node's built-in runner)
 FLIPP_DRY_RUN=1 npm run fetch-flipp-ad   # fetch and summarize, no Supabase write
+node --env-file=.env scripts/replace-meal.mjs <draft-meal-id>   # preview a new pick for one draft meal
+node --env-file=.env scripts/rebuild-grocery-list.mjs           # recover the list for the active plan
 ```
 
 On PowerShell, set the variable first: `$env:FLIPP_DRY_RUN='1'`. Other switches: `FLIPP_ENRICH=0` skips per-item detail requests, and `FLIPP_CLAUDE=0` skips the coupon cleanup.

@@ -1,28 +1,33 @@
-name: Wednesday plan draft
+name: Daily plan draft
 
 on:
   schedule:
-    # 12:00 UTC ~= 7:00 AM America/Chicago (CDT). Adjust for your time zone/DST.
-    # Runs an hour after the weekly-ad fetch so it can read ads/current.
-    - cron: "0 12 * * 3"
-    # Thursday and Friday: no new draft, just promote the week that started
-    # (Thursday is skipped while the order list is still waiting to be placed).
-    - cron: "0 12 * * 4,5"
+    # 12:00 UTC ~= 7:00 AM America/Chicago (CDT). Runs every morning:
+    # scripts/plan-draft.mjs always checks whether a due draft should be
+    # promoted, and only starts a NEW draft on the board's configured plan day
+    # (Settings tab), so this single daily schedule works for any weekday.
+    - cron: "0 12 * * *"
+  # Also started by the board's "Manually fetch weekly recipes" button.
   workflow_dispatch: {}
 
 jobs:
   draft:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      PLAN_TIME_ZONE: America/Chicago
+      PLAN_DAY: ${{ vars.PLAN_DAY }}
+      DELIVERY_DAY: ${{ vars.DELIVERY_DAY }}
+      PLAN_GUIDELINES: ${{ vars.PLAN_GUIDELINES }}
+      PLAN_MAX_COOK_MINUTES: ${{ vars.PLAN_MAX_COOK_MINUTES }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
-      - run: npm install
+          node-version: 22
+          cache: npm
+      - run: npm ci
       - run: node scripts/plan-draft.mjs
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          PLAN_TIME_ZONE: America/Chicago
-          PLAN_GUIDELINES: ${{ vars.PLAN_GUIDELINES }}

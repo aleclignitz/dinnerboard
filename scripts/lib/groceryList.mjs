@@ -39,3 +39,41 @@ Return JSON with exactly this shape:
     return flat;
   }
 }
+
+const section = (title, items) => (items.length ? ["", title, ...items.map((i) => `- ${i}`)] : []);
+
+// Formats the order hand-off text saved behind the board's Copy list button.
+// Pure, so the exact wording is unit-tested.
+export function formatOrderText({ ingredients, grocery = [], lowStaples = [], settings, ad, pickup = "" }) {
+  const timing = settings.orderMethod === "pickup" ? `, with an afternoon pickup (${settings.pickupWindow} if available)` : ", for delivery";
+  const lines = [
+    `Please build a ${settings.storeName} order${pickup ? ` for ${pickup}` : ""}${timing}, with these items:`,
+    "",
+    "Recipe ingredients:",
+    ...ingredients.map((i) => `- ${i}`),
+    ...section("Quick adds:", grocery.map((g) => g.text)),
+    ...section("Staples running low:", lowStaples.map((s) => s.name))
+  ];
+  if (ad && ad.ok) lines.push(...section("Coupons to clip (Tom Thumb weekly ad):", ad.coupons || []));
+  else lines.push("", "Note: this week's Tom Thumb ad could not be retrieved - no sale-based substitutions were applied.");
+  lines.push("", `${settings.substitutionRules} Leave the order for me to review before it's placed.`);
+  return lines.join("\n");
+}
+
+// Builds the full order for a set of meals: merges and trims their
+// ingredients against the pantry, then adds quick adds, low staples and
+// coupons. `included` records which quick adds/staples the board clears or
+// restocks when the order is marked placed.
+export async function buildOrder({ meals, grocery, staples, freezer, settings, ad, pickup }) {
+  const lowStaples = staples.filter((s) => s.status === "low");
+  const ingredients = await trimIngredientsAgainstPantry({
+    ingredients: meals.flatMap((m) => (m.recipe && m.recipe.ingredients) || []),
+    staples,
+    freezer
+  });
+  return {
+    orderText: formatOrderText({ ingredients, grocery, lowStaples, settings, ad, pickup }),
+    included: { grocery: grocery.map((g) => g.id), staples: lowStaples.map((s) => s.id) },
+    itemCount: ingredients.length + grocery.length + lowStaples.length
+  };
+}

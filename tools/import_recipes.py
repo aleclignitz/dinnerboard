@@ -2,12 +2,12 @@
 """Convert an nyt-cooking-parser sqlite export into a staging JSON file shaped
 for the Supabase `recipes` table (see sql/schema.sql). Load it with:
 
-    python3 tools/import_recipes.py <path-to-recipes.db> > .recipes-staging.json
-    node scripts/load-recipes.mjs .recipes-staging.json
+    python tools/import_recipes.py <path-to-recipes.db> .recipes-staging.json
+    node --env-file=.env scripts/load-recipes.mjs .recipes-staging.json
 
 The staging file is gitignored - recipes live in Supabase, not this repo.
 
-Usage:  python3 tools/import_recipes.py <path-to-recipes.db> [output-path]
+Usage:  python tools/import_recipes.py <path-to-recipes.db> [output-path]
 """
 import json
 import re
