@@ -1,6 +1,8 @@
 node_modules/
 .env
 .recipes-staging.json
+.paprika-staging.json
+*.paprikarecipes
 scripts/_tomthumb-storageState.json
 scripts/_debug*
 flyer.pdf

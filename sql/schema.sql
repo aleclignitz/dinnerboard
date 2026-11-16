@@ -20,8 +20,10 @@ create policy "household write" on documents
 -- Required for the board's live onSnapshot-style updates.
 alter publication supabase_realtime add table documents;
 
--- Fixed recipe dataset (ported from an external scrape), read-only from the
--- board/scripts. Loaded in bulk by scripts/load-recipes.mjs, not edited here.
+-- Recipe dataset. Imported sets (NYT, Paprika) are loaded in bulk by
+-- scripts/load-recipes.mjs and are read-only from the board/scripts; recipes
+-- added from the board's Recipe Box are the only rows the board writes.
+-- After this file, run every file in sql/migrations/ in name order.
 create table if not exists recipes (
   id integer primary key,
   title text not null,

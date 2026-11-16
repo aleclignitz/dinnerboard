@@ -129,12 +129,31 @@
     };
   }
 
-  // Extras beyond the db/user shim, used by the Settings tab.
+  // Extras beyond the db/user shim, used by the Settings and Recipe Box tabs.
   window.dinnerboard = {
     recipeCount: async function () {
       var res = await client.from("recipes").select("id", { count: "exact", head: true });
       if (res.error) throw res.error;
       return res.count || 0;
+    },
+    // Searches every recipe source (see search_recipes in sql/migrations/).
+    // source: "" (all) | "nyt" | "paprika" | "manual"; protein: "" or a protein.
+    searchRecipes: async function (q, source, protein) {
+      var res = await client.rpc("search_recipes", { q: q || "", src: source || null, prot: protein || null, lim: 40 });
+      if (res.error) throw res.error;
+      return res.data || [];
+    },
+    // Adds one recipe to the box. RLS only allows source "manual" from the board.
+    addRecipe: async function (recipe) {
+      var row = Object.assign({}, recipe, { source: "manual" });
+      delete row.id;
+      var res = await client.from("recipes").insert(row).select().single();
+      if (res.error) throw res.error;
+      return res.data;
+    },
+    deleteRecipe: async function (id) {
+      var res = await client.from("recipes").delete().eq("id", id).eq("source", "manual");
+      if (res.error) throw res.error;
     },
     // Asks the dispatch-workflow edge function to start an allow-listed workflow.
     startWorkflow: async function (name) {

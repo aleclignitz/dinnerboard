@@ -6,6 +6,10 @@
 import { askClaude, parseClaudeJson } from "./claude.mjs";
 
 const CANDIDATE_LIMIT = 10;
+// Shortlist slots reserved for your own recipes (Paprika imports and recipes
+// added on the board). They're mostly unrated, so on rating alone the large
+// NYT dataset would always crowd them out.
+const OWN_RECIPE_SLOTS = 3;
 
 // Looser each time: drop the rating floor, then the time cap, then the
 // protein requirement - in that order - until something matches. The
@@ -25,25 +29,31 @@ export function buildAttempts({ protein, maxTime }) {
   return attempts;
 }
 
-async function queryRecipes(supabase, { protein, maxTime, minRating, excludeIds, limit }) {
+// `own` true = only your own recipes (no rating floor; most are unrated),
+// false = only the NYT dataset.
+async function queryRecipes(supabase, { protein, maxTime, minRating, excludeIds, limit, own }) {
   let query = supabase.from("recipes").select("*").eq("course", "entree");
+  query = own ? query.neq("source", "nyt") : query.eq("source", "nyt");
   if (protein) query = query.eq("protein", protein);
   if (maxTime) query = query.lte("time_minutes", maxTime);
-  if (minRating) query = query.gte("rating", minRating);
+  if (minRating && !own) query = query.gte("rating", minRating);
   if (excludeIds.length) query = query.not("id", "in", `(${excludeIds.join(",")})`);
   const { data, error } = await query
-    .order("rating", { ascending: false })
+    .order("rating", { ascending: false, nullsFirst: false })
     .order("id", { ascending: true })
     .limit(limit);
   if (error) throw error;
   return data || [];
 }
 
-// Returns up to `limit` candidates, deterministic for a given db state and
-// exclude set (stable sort: rating desc, id asc tie-break).
+// Returns up to `limit` candidates - up to OWN_RECIPE_SLOTS of your own
+// recipes first, then the NYT dataset - deterministic for a given db state
+// and exclude set (stable sort: rating desc, id asc tie-break).
 export async function pickCandidates(supabase, { protein, maxTime, excludeIds = [], limit = CANDIDATE_LIMIT }) {
   for (const attempt of buildAttempts({ protein, maxTime })) {
-    const candidates = await queryRecipes(supabase, { ...attempt, excludeIds, limit });
+    const own = await queryRecipes(supabase, { ...attempt, excludeIds, limit: Math.min(OWN_RECIPE_SLOTS, limit), own: true });
+    const nyt = await queryRecipes(supabase, { ...attempt, excludeIds, limit: limit - own.length, own: false });
+    const candidates = own.concat(nyt);
     if (candidates.length) return { candidates, usedFilters: attempt };
   }
   return { candidates: [], usedFilters: null };
@@ -53,6 +63,7 @@ function summarizeCandidate(c) {
   return {
     id: c.id,
     title: c.title,
+    from: c.source && c.source !== "nyt" ? "household recipe box" : "NYT Cooking",
     tags: c.tags,
     rating: c.rating,
     ratingCount: c.rating_count,
@@ -78,6 +89,7 @@ Candidate recipes (choose the best fit, or reject all if none are a good fit):
 ${JSON.stringify(candidates.map(summarizeCandidate))}
 
 Reject a candidate if it clashes with the guidelines (e.g. too spicy if that's disallowed, wrong protein for variety, repeats something recently rated low), duplicates a recent meal, or doesn't make sense for a weeknight.
+Recipes "from" the household recipe box were saved by the household on purpose and are usually unrated; when one fits as well as the others, prefer it.
 
 If a protein in the ingredients needs to move from freezer to fridge the night before, write "thaw" describing what to thaw. Use safe internal temperatures (poultry 165F, fish 145F) in instructions.
 

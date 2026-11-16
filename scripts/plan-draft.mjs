@@ -87,8 +87,10 @@ async function main() {
     await status(supabase, { status: "skipped", message: `Next plan isn't due until the day before ${newStart}.` });
     return;
   }
-  // A new draft is only started on the board's configured plan day; promotion above still runs daily.
-  if (weekdayOf(today) !== dayNameToIndex(settings.planDay)) {
+  // A scheduled run only starts a new draft on the configured plan day (promotion above still
+  // runs daily); a manual run from the board's button drafts whenever a plan is due.
+  const manual = process.env.GITHUB_EVENT_NAME === "workflow_dispatch";
+  if (!manual && weekdayOf(today) !== dayNameToIndex(settings.planDay)) {
     const message = `Next plan is due, but today isn't the configured plan day (${settings.planDay}).`;
     console.log(message, notes.join(" "));
     await status(supabase, { status: "skipped", message });

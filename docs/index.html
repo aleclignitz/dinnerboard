@@ -91,6 +91,12 @@ h2{font-size:1.15rem;font-weight:700}
 .btn.danger{background:var(--danger);color:#fff}
 .bulk summary{cursor:pointer;font-weight:700;font-size:.92rem;padding:8px 0}
 .bulk .sform{margin-top:6px}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.filters{display:flex;flex-wrap:wrap;gap:6px}
+.filters button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font-size:.85rem;font-weight:700;color:var(--muted);min-height:36px}
+.filters button[aria-pressed="true"]{background:var(--basil);border-color:var(--basil);color:var(--on-basil)}
+.chip.src{background:var(--sunk);color:var(--muted)}
+.chip.mine{background:var(--honey-soft);color:var(--honey)}
 
 /* stars */
 .stars{display:inline-flex;gap:2px}
@@ -149,6 +155,8 @@ h2{font-size:1.15rem;font-weight:700}
 .nav .in{max-width:560px;margin:0 auto;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr)}
 .nav button{border:0;background:transparent;height:var(--nav-h);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:0 2px;font-size:.75rem;font-weight:700;color:var(--muted);position:relative}
 @media (max-width:400px){.nav button{font-size:.68rem}}
+/* Long labels ("Recipe Box") may wrap on phones; top-align so every icon stays on one line. */
+@media (max-width:959px){.nav button{justify-content:flex-start;padding-top:10px;line-height:1.1;text-align:center}}
 .nav button svg{width:22px;height:22px}
 .nav button[aria-current="page"]{color:var(--basil)}
 .nav .badge{position:absolute;top:8px;left:calc(50% + 6px);background:var(--honey);color:var(--surface);font-size:.65rem;min-width:18px;height:18px;border-radius:9px;display:grid;place-items:center;padding:0 5px;font-variant-numeric:tabular-nums}
@@ -349,9 +357,57 @@ h2{font-size:1.15rem;font-weight:700}
     </div>
   </section>
 
-  <!-- FEEDBACK -->
-  <section class="view" id="v-feedback" hidden>
+  <!-- RECIPE BOX -->
+  <section class="view" id="v-box" hidden>
     <div class="section" style="margin-top:0">
+      <div class="section-head"><h2>Find a recipe</h2><span class="count" id="boxCount"></span></div>
+      <p class="muted hint">Searches NYT Cooking, your Paprika recipes and recipes you've added, by name, ingredient, tag or cookbook. Tap a recipe to put it on a night in the plan.</p>
+      <form class="addform" id="boxSearchForm" role="search" autocomplete="off">
+        <input id="boxQuery" type="search" placeholder="e.g. chicken thighs, leeks, Molly Baz" aria-label="Search recipes">
+        <button class="btn" type="submit">Search</button>
+      </form>
+      <div class="filters" id="boxSources" role="group" aria-label="Where recipes come from">
+        <button type="button" data-act="boxSource" data-v="" aria-pressed="true">All</button>
+        <button type="button" data-act="boxSource" data-v="paprika" aria-pressed="false">Paprika</button>
+        <button type="button" data-act="boxSource" data-v="manual" aria-pressed="false">Added by you</button>
+        <button type="button" data-act="boxSource" data-v="nyt" aria-pressed="false">NYT Cooking</button>
+      </div>
+      <div id="boxResults" class="stack"></div>
+    </div>
+    <div class="section">
+      <div class="section-head"><h2>Add a recipe</h2></div>
+      <p class="muted hint">Saves one recipe to the box. It shows up in search right away, and main dishes can be picked by the weekly plan too.</p>
+      <details class="bulk" id="recipeFormWrap">
+        <summary>Add a recipe by hand</summary>
+        <form class="sform" id="recipeForm" autocomplete="off">
+          <label>Name<input id="rfTitle" type="text" required maxlength="200" placeholder="e.g. Grandma's chicken and dumplings"></label>
+          <label>Link to the original<small>Optional.</small><input id="rfUrl" type="url" placeholder="https://"></label>
+          <div class="pair">
+            <label>Kind of dish<select id="rfCourse"><option value="entree">Main dish</option><option value="side">Side</option><option value="other">Other</option></select></label>
+            <label>Main protein<select id="rfProtein"><option value="">None or mixed</option><option value="chicken">Chicken</option><option value="beef">Beef</option><option value="pork">Pork</option><option value="turkey">Turkey</option><option value="lamb">Lamb</option><option value="fish">Fish or seafood</option><option value="vegetarian">Vegetarian</option></select></label>
+          </div>
+          <div class="pair">
+            <label>Serves<input id="rfServes" type="number" min="1" max="50" step="1" placeholder="4"></label>
+            <label>Total time, minutes<input id="rfTime" type="number" min="1" max="1440" step="1" placeholder="45"></label>
+          </div>
+          <label>Ingredients<small>One per line.</small><textarea id="rfIngredients" required placeholder="1 lb chicken thighs&#10;2 garlic cloves, minced"></textarea></label>
+          <label>Steps<small>One step per line.</small><textarea id="rfSteps" placeholder="Season the chicken.&#10;Sear until golden, about 6 minutes."></textarea></label>
+          <label>Short description<small>Optional.</small><input id="rfDesc" type="text" maxlength="300"></label>
+          <label>Notes or tips<small>Optional.</small><textarea id="rfTip"></textarea></label>
+          <label>Tags<small>Optional, separated by commas.</small><input id="rfTags" type="text" placeholder="weeknight, kid favorite"></label>
+          <div><button class="btn" type="submit">Save to recipe box</button></div>
+        </form>
+      </details>
+    </div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section class="view" id="v-settings" hidden>
+    <div class="section" style="margin-top:0">
+      <div class="section-head"><h2>Get started</h2></div>
+      <div id="setupDyn" class="setup"></div>
+    </div>
+    <div class="section">
       <div class="section-head"><h2>Requests for the next plan</h2></div>
       <p class="muted hint">Meals to try, things to skip, busy nights coming up. Claude reads these before writing the next week.</p>
       <form class="addform" id="ideaForm" autocomplete="off">
@@ -363,18 +419,6 @@ h2{font-size:1.15rem;font-weight:700}
     <div class="section">
       <div class="section-head"><h2>Cook-night ratings</h2></div>
       <div id="ratingsDyn"></div>
-    </div>
-    <div class="section">
-      <div class="section-head"><h2>Plan guidelines</h2></div>
-      <div class="guide" id="guideDyn"><p>Loading…</p></div>
-    </div>
-  </section>
-
-  <!-- SETTINGS -->
-  <section class="view" id="v-settings" hidden>
-    <div class="section" style="margin-top:0">
-      <div class="section-head"><h2>Get started</h2></div>
-      <div id="setupDyn" class="setup"></div>
     </div>
     <div class="section">
       <div class="section-head"><h2>Settings</h2></div>
@@ -424,8 +468,8 @@ h2{font-size:1.15rem;font-weight:700}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9h16l-1.6 9.2a2 2 0 0 1-2 1.8H7.6a2 2 0 0 1-2-1.8z"/><path d="M8.5 9 11 4M15.5 9 13 4"/></svg>Shopping<span class="badge" id="navBadge" hidden></span></button>
     <button type="button" data-tab="deals">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.6 12.3 12.7 20.2a1.5 1.5 0 0 1-2.1 0l-6.8-6.8a1.5 1.5 0 0 1 0-2.1l7.9-7.9H17a3.5 3.5 0 0 1 3.5 3.5v4.6a1.5 1.5 0 0 1-.4 1z"/><circle cx="14.8" cy="9.2" r="1.3"/></svg>Deals</button>
-    <button type="button" data-tab="feedback">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="m12 3.5 2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z"/></svg>Feedback</button>
+    <button type="button" data-tab="box">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5.5A2.5 2.5 0 0 1 7.5 3H19v14H7.5A2.5 2.5 0 0 0 5 19.5z"/><path d="M5 19.5A2.5 2.5 0 0 0 7.5 22H19v-5"/><path d="M9 7.5h6M9 11h4"/></svg>Recipe Box</button>
     <button type="button" data-tab="settings">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h0a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</button>
     <button type="button" class="fsbtn" id="fsBtn" data-act="fullscreen" aria-pressed="false">
@@ -465,6 +509,11 @@ h2{font-size:1.15rem;font-weight:700}
 </div>
 
 <div class="toast" id="toast" role="status" hidden></div>
+<div class="scrim" id="boxScrim" hidden></div>
+<div class="sheet" id="boxSheet" role="dialog" aria-modal="true" aria-labelledby="boxTitle" hidden>
+  <div class="grab"></div>
+  <div id="boxSheetDyn"></div>
+</div>
 <div class="scrim" id="copyScrim" hidden></div>
 <div class="sheet" id="copySheet" role="dialog" aria-modal="true" aria-labelledby="copyTitle" hidden>
   <div class="grab"></div>
@@ -561,6 +610,7 @@ h2{font-size:1.15rem;font-weight:700}
     let sub = chip(m.kind);
     if(m.kind==="cook") sub += '<span class="muted" style="font-size:.8rem">'+cookNo(m)+'</span>';
     if(m.swapOut) sub += '<span class="chip replace">Replacing…</span>';
+    if(m.addedFrom==="box") sub += '<span class="chip mine">Your pick</span>';
     if(m.rating) sub += starsHtml(m,true);
     const nn = notesFor(m.id).length; if(nn) sub += '<span class="muted" style="font-size:.8rem">'+nn+' note'+(nn>1?'s':'')+'</span>';
     if(next && next.thaw) sub += '<span class="thawline'+(next.thawDone?' done':'')+'">'+SNOW.replace('class="ico"','width="14" height="14"')+'Thaw tonight: '+esc(next.thaw)+'</span>';
@@ -591,7 +641,7 @@ h2{font-size:1.15rem;font-weight:700}
   function renderHeader(){
     const t = today();
     $("todayLabel").textContent = fmt(t,{weekday:"long",month:"short",day:"numeric"});
-    $("viewTitle").textContent = {today:"Tonight",plan:"Weekly plan",shop:"Shopping",deals:"Deals",feedback:"Feedback",settings:"Settings",muse:"Muse"}[tab];
+    $("viewTitle").textContent = {today:"Tonight",plan:"Weekly plan",shop:"Shopping",deals:"Deals",box:"Recipe Box",settings:"Settings",muse:"Muse"}[tab];
     const ms = S.meals.slice().sort(byDate);
     if(ms.length){
       const a = ms[0].date, b = ms[ms.length-1].date;
@@ -615,7 +665,7 @@ h2{font-size:1.15rem;font-weight:700}
       h += '<div class="tonight"><span class="eyebrow">Night off</span><span class="meal-title">Nothing planned tonight</span><p>'+(nx?"Next up: "+esc(nx.title)+" on "+fmt(nx.date,{weekday:"long"})+".":"")+'</p></div>';
     } else if(!tm){
       const last = ms[ms.length-1].date;
-      h += '<div class="tonight"><span class="eyebrow">'+(t>last?"Plan finished":"Plan starts "+fmt(ms[0].date,{weekday:"long",month:"short",day:"numeric"}))+'</span><span class="meal-title">'+(t>last?"Next plan coming soon":"Nothing planned yet")+'</span><p>'+(t>last?"Leave requests on the Feedback tab and add anything you need to the next order.":"")+'</p></div>';
+      h += '<div class="tonight"><span class="eyebrow">'+(t>last?"Plan finished":"Plan starts "+fmt(ms[0].date,{weekday:"long",month:"short",day:"numeric"}))+'</span><span class="meal-title">'+(t>last?"Next plan coming soon":"Nothing planned yet")+'</span><p>'+(t>last?"Leave requests in Settings and add anything you need to the next order.":"")+'</p></div>';
     } else {
       h += '<button type="button" class="tonight" data-act="open" data-id="'+esc(tm.id)+'">'+
         '<span class="meta">'+chip(tm.kind)+(tm.kind==="cook"?'<span class="muted" style="font-size:.85rem">Cook night '+cookNo(tm)+' this week</span>':'')+'</span>'+
@@ -722,7 +772,7 @@ h2{font-size:1.15rem;font-weight:700}
     Object.keys(next).forEach(k=>{ if(next[k]==="") delete next[k]; });
     save(async()=>{
       await db.doc("settings/app").set(next);
-      // Keep the Feedback tab's guidelines in step with the setting.
+      // The scripts fall back to the plan's own copy of the guidelines, so keep it in step.
       const p = await db.doc("plan/current").get();
       if(p.exists && next.planGuidelines) await db.doc("plan/current").update({guidelines: next.planGuidelines});
       settingsDirty = false;
@@ -849,7 +899,7 @@ h2{font-size:1.15rem;font-weight:700}
   }
 
   function renderFeedback(){
-    if(dbState==="none"){ ["ideasDyn","ratingsDyn"].forEach(i=>$(i).innerHTML=""); $("guideDyn").innerHTML=""; return; }
+    if(dbState==="none"){ ["ideasDyn","ratingsDyn"].forEach(i=>$(i).innerHTML=""); return; }
     if(dbState==="pending") return;
     const ideas = S.ideas.slice().sort((a,b)=>(a.at||"")<(b.at||"")?1:-1);
     $("ideasDyn").innerHTML = ideas.length
@@ -861,7 +911,6 @@ h2{font-size:1.15rem;font-weight:700}
           return '<button type="button" class="rrow" data-act="open" data-id="'+esc(m.id)+'"><span class="t">'+esc(m.title)+'</span>'+(m.rating?starsHtml(m,true):'<span class="muted" style="font-size:.85rem">Rate it</span>')+
           '<span class="n">'+fmt(m.date,{weekday:"short",month:"short",day:"numeric"})+(ns.length?' · “'+esc(ns[ns.length-1].text)+'”':'')+'</span></button>'; }).join("")+'</div>'
       : '<div class="empty">Ratings show up here after each cook night.</div>';
-    $("guideDyn").innerHTML = S.plan && S.plan.guidelines ? '<p>'+esc(S.plan.guidelines)+'</p>' : '<p>No guidelines saved yet.</p>';
   }
 
   function orderText(){
@@ -888,9 +937,156 @@ h2{font-size:1.15rem;font-weight:700}
     tx.textContent = orderText();
   }
 
+  // ---------- Recipe Box ----------
+  const SRC = {nyt:"NYT Cooking", paprika:"Paprika", manual:"Added by you"};
+  const BOX_LIMIT = 40;
+  const BX = {q:"", source:"", results:[], busy:false, searched:false, error:"", seq:0};
+  let boxRecipe = null, boxTimer = null;
+  const textLines = s => String(s||"").split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  const firstSentence = s => { const t = String(s||"").trim(); if(!t) return ""; const m = t.match(/^.{20,220}?[.!?](\s|$)/); return (m ? m[0] : t.slice(0,200)).trim(); };
+  // A recipes-table row in the board's meal.recipe shape (same as scripts/lib/recipePicker.mjs).
+  const boardRecipe = r => ({serves:r.serves||null, time:r.time_minutes||null, oven:r.oven||"", ingredients:(r.ingredients||[]).filter(Boolean), steps:(r.steps||[]).filter(Boolean), tip:r.tip||"", url:r.url||""});
+
+  async function runBoxSearch(){
+    if(!window.dinnerboard || dbState!=="ready") return;
+    clearTimeout(boxTimer);
+    const seq = ++BX.seq;
+    BX.q = $("boxQuery").value.trim(); BX.busy = true; renderBox();
+    try{
+      const rows = await window.dinnerboard.searchRecipes(BX.q, BX.source, "");
+      if(seq!==BX.seq) return;
+      BX.results = rows; BX.error = "";
+    }catch(e){
+      if(seq!==BX.seq) return;
+      BX.results = []; BX.error = "Recipe search isn't set up yet. Run the Recipe Box migration in Supabase (see the README), then reload.";
+    }
+    BX.busy = false; BX.searched = true; renderBox();
+  }
+
+  function renderBox(){
+    document.querySelectorAll("#boxSources button").forEach(b=>b.setAttribute("aria-pressed", String(b.dataset.v===BX.source)));
+    const n = BX.results.length;
+    $("boxCount").textContent = BX.searched && !BX.error ? (n>=BOX_LIMIT ? "Top "+n : n+" recipe"+(n===1?"":"s")) : "";
+    let h;
+    if(dbState==="none") h = "";
+    else if(BX.error) h = '<div class="empty">'+esc(BX.error)+'</div>';
+    else if(BX.busy && !n) h = '<div class="empty">Searching…</div>';
+    else if(!BX.searched) h = '<div class="empty">Search by name, ingredient, tag or cookbook.</div>';
+    else if(!n) h = '<div class="empty">No recipes match'+(BX.q?' “'+esc(BX.q)+'”':'')+(BX.source?' in '+esc(SRC[BX.source]):'')+'.</div>';
+    else h = '<div class="list" style="overflow:hidden">'+BX.results.map((r,i)=>{
+        const bits = [SRC[r.source]||"", r.credit||"", r.time_minutes?r.time_minutes+" min":"", r.protein?cap(r.protein):"", r.rating?"★ "+(+r.rating).toFixed(1):""].filter(Boolean);
+        return '<button type="button" class="rrow" data-act="boxOpen" data-i="'+i+'"><span class="t">'+esc(r.title)+'</span><span class="chev" aria-hidden="true">›</span><span class="n">'+esc(bits.join(" · "))+'</span></button>';
+      }).join("")+'</div>';
+    $("boxResults").innerHTML = h;
+  }
+
+  // Every night from today through the end of the current and next plan, with the
+  // collection a recipe placed there belongs in. Nights off inside a plan count too.
+  function boxNights(){
+    const t = today(), all = meals(), out = [];
+    const range = (list, col, d) => { const ds = list.map(m=>m.date).sort(); return ds.length ? {col, start:(d&&d.start)||ds[0], end:(d&&d.end)||ds[ds.length-1]} : null; };
+    [range(S.meals,"meals"), range(S.draft,"draft",S.dplan)].filter(Boolean).forEach(r=>{
+      for(let k = r.start>t ? r.start : t; k<=r.end; k = addDays(k,1)){
+        if(out.some(o=>o.date===k)) continue;
+        const m = all.find(x=>x.date===k);
+        out.push({date:k, col:m ? m._col : r.col, meal:m || null});
+      }
+    });
+    return out.sort((a,b)=>a.date<b.date?-1:1);
+  }
+
+  function renderBoxSheet(){
+    const r = boxRecipe; if(!r) return;
+    const nights = boxNights();
+    const credit = [SRC[r.source]||"", r.credit||""].filter(Boolean).join(" · ");
+    let h = '<div class="head"><div><span class="eyebrow">'+esc(credit)+'</span><div class="meal-title" id="boxTitle">'+esc(r.title)+'</div></div>'+
+      '<button type="button" class="iconbtn" data-act="boxClose" aria-label="Close">'+X+'</button></div>'+
+      '<div class="stack" style="margin-top:10px">';
+    const facts = [r.course==="entree"?"Main dish":r.course==="side"?"Side":"", r.protein?cap(r.protein):"", r.rating?"★ "+(+r.rating).toFixed(1)+(r.rating_count?" ("+r.rating_count+")":""):""].filter(Boolean);
+    if(facts.length) h += '<div style="display:flex;gap:6px;flex-wrap:wrap">'+facts.map(f=>'<span class="chip src">'+esc(f)+'</span>').join("")+'</div>';
+    if(r.description) h += '<p class="muted">'+esc(firstSentence(r.description))+'</p>';
+    h += '</div><div class="section"><div class="section-head"><h2>Add to the plan</h2></div>';
+    if(!db || readOnly) h += '<p class="muted hint">You can view recipes but not change the plan.</p>';
+    else if(!nights.length) h += '<p class="muted hint">There\'s no plan to add this to yet. Once the next plan is drafted (on plan day, or from Settings), come back and pick a night.</p>';
+    else h += '<p class="muted hint">Pick a night. Its meal is replaced with this recipe, and nights off become a cook night.</p><div class="swaplist">'+nights.map(n=>
+      '<button type="button" data-act="boxPlace" data-date="'+esc(n.date)+'"><b>'+esc(fmt(n.date,{weekday:"short",month:"short",day:"numeric"}))+(n.col==="draft"?" · next plan":"")+'</b>'+
+      (n.meal ? (n.meal.sourceRecipeId===r.id ? 'Already this recipe' : esc(n.meal.title)) : '<span class="muted">Night off</span>')+'</button>').join("")+'</div>';
+    h += '</div>' + recipeHtml({id:"box-"+r.id, recipe:boardRecipe(r)});
+    if(r.source==="manual" && db && !readOnly) h += '<div class="section"><div><button type="button" class="btn danger small" data-act="boxDelete">Delete from recipe box</button></div></div>';
+    $("boxSheetDyn").innerHTML = h;
+  }
+  function openBoxSheet(r){ boxRecipe = r; $("boxScrim").hidden = false; $("boxSheet").hidden = false; renderBoxSheet(); $("boxSheet").scrollTop = 0; }
+  function closeBoxSheet(){ boxRecipe = null; $("boxScrim").hidden = true; $("boxSheet").hidden = true; }
+
+  // Puts the open recipe on a night: replaces that night's meal, or fills a night off.
+  async function placeRecipe(date){
+    const r = boxRecipe, n = boxNights().find(x=>x.date===date); if(!r || !n) return;
+    const day = fmt(date,{weekday:"long"});
+    if(n.meal && n.meal.sourceRecipeId===r.id){ toast(r.title+" is already on "+day+"."); return; }
+    if(n.meal && !confirm("Replace "+n.meal.title+" on "+day+" with "+r.title+"?")) return;
+    const base = {};
+    if(n.meal) Object.keys(n.meal).forEach(k=>{ if(!["id","_col","from","swapNote","swapOut"].includes(k)) base[k] = n.meal[k]; });
+    const meal = Object.assign(base, {
+      date, kind:"cook", title:r.title, details:firstSentence(r.description) || (r.credit ? "From "+r.credit+"." : ""),
+      thaw:"", thawDone:false, rating:0, sourceRecipeId:r.id, addedFrom:"box", recipe:boardRecipe(r)
+    });
+    if(n.col==="draft") meal.swapOut = false;
+    const ref = n.meal ? db.doc(n.col+"/"+n.meal.id) : db.collection(n.col).doc();
+    if(!(await save(()=>ref.set(meal)))) return;
+    closeBoxSheet();
+    let msg = r.title+" is on "+day+". ";
+    if(n.col==="meals") msg += "This week's groceries were already planned, so add anything you're missing to the next order.";
+    else if(status()==="list_ready") msg += "Tap Rebuild list so its ingredients are on the order.";
+    else msg += "Its ingredients go on the next grocery list.";
+    toast(msg);
+  }
+
+  async function deleteBoxRecipe(){
+    const r = boxRecipe; if(!r || r.source!=="manual") return;
+    if(!confirm("Delete "+r.title+" from the recipe box? Meals already planned with it keep their copy.")) return;
+    try{
+      await window.dinnerboard.deleteRecipe(r.id);
+      BX.results = BX.results.filter(x=>x.id!==r.id);
+      closeBoxSheet(); renderBox(); refreshRecipeCount();
+      toast("Deleted from the recipe box");
+    }catch(e){ toast("Couldn't delete that recipe. Try again."); }
+  }
+
+  async function addBoxRecipe(e){
+    e.preventDefault();
+    if(!db || readOnly){ toast("You can view recipes but not add them."); return; }
+    const v = id => $(id).value.trim();
+    const num = (id,min,max) => { const s = v(id); if(!s) return null; const x = Number(s); return Number.isInteger(x) && x>=min && x<=max ? x : NaN; };
+    const title = v("rfTitle"), url = v("rfUrl"), ingredients = textLines(v("rfIngredients"));
+    const serves = num("rfServes",1,50), time = num("rfTime",1,1440);
+    if(!title){ toast("Give the recipe a name."); return; }
+    if(!ingredients.length){ toast("Add at least one ingredient."); return; }
+    if(url && !/^https?:\/\/\S+$/i.test(url)){ toast("The link should start with http:// or https://"); return; }
+    if(Number.isNaN(serves)){ toast("Serves should be a whole number from 1 to 50."); return; }
+    if(Number.isNaN(time)){ toast("Total time should be a whole number of minutes."); return; }
+    const seen = new Set();
+    const row = {
+      title, url:url || null, description:v("rfDesc") || null, course:$("rfCourse").value, protein:$("rfProtein").value || null,
+      serves, time_minutes:time, oven:"", ingredients,
+      steps:textLines(v("rfSteps")).map(s=>s.replace(/^(?:step\s*)?\d+\s*[.):]\s*/i,"")),
+      tip:v("rfTip"), tags:v("rfTags").split(",").map(x=>x.trim()).filter(x=>x && !seen.has(x.toLowerCase()) && seen.add(x.toLowerCase()))
+    };
+    const btn = e.submitter || $("recipeForm").querySelector('button[type="submit"]'); btn.disabled = true;
+    try{
+      const saved = await window.dinnerboard.addRecipe(row);
+      $("recipeForm").reset(); $("recipeFormWrap").open = false;
+      refreshRecipeCount();
+      if(BX.searched) runBoxSearch();
+      toast("Saved to the recipe box");
+      openBoxSheet(saved);
+    }catch(err){
+      toast("Couldn't save the recipe. If this keeps happening, check that the Recipe Box migration has been run (see the README).");
+    }finally{ btn.disabled = false; }
+  }
+
   function recipeHtml(m){
     const r = m.recipe; if(!r) return "";
-    const fx = [r.serves?"Serves "+r.serves:"", r.time||"", r.oven?"Oven "+r.oven:""].filter(Boolean);
+    const fx = [r.serves?"Serves "+r.serves:"", typeof r.time==="number" ? r.time+" min" : (r.time||""), r.oven?"Oven "+r.oven:""].filter(Boolean);
     let h = '<div class="recipe"><div class="section-head"><h2>Recipe</h2><button type="button" class="btn small ghost" data-act="awake" aria-pressed="'+(!!wakeLock)+'">'+(wakeLock?"Screen stays on":"Keep screen on")+'</button></div>';
     if(fx.length) h += '<div class="rfacts">'+fx.map(f=>'<span class="fact">'+esc(f)+'</span>').join("")+'</div>';
     if(r.url) h += '<a class="btn small ghost" style="align-self:flex-start;display:inline-block;text-decoration:none" href="'+esc(r.url)+'" target="_blank" rel="noopener">View original recipe</a>';
@@ -934,13 +1130,14 @@ h2{font-size:1.15rem;font-weight:700}
   });
 
   async function toggleAwake(){
-    if(wakeLock){ try{ await wakeLock.release(); }catch(e){} wakeLock = null; if(openId) renderSheet(); return; }
+    const rerender = () => { if(openId) renderSheet(); if(boxRecipe) renderBoxSheet(); };
+    if(wakeLock){ try{ await wakeLock.release(); }catch(e){} wakeLock = null; rerender(); return; }
     try{
       wakeLock = await navigator.wakeLock.request("screen");
-      wakeLock.addEventListener("release", ()=>{ wakeLock = null; if(openId) renderSheet(); });
+      wakeLock.addEventListener("release", ()=>{ wakeLock = null; rerender(); });
       toast("The screen will stay on while this page is open");
     }catch(e){ wakeLock = null; toast("This device won't keep the screen on from here. Turn off auto-lock in its settings instead."); }
-    if(openId) renderSheet();
+    rerender();
   }
 
   function renderSheet(){
@@ -977,6 +1174,7 @@ h2{font-size:1.15rem;font-weight:700}
   function render(){
     renderHeader(); renderToday(); renderPlan(); renderShop(); renderDeals(); renderFeedback(); renderSettings(); renderMuseOrder();
     if(openId) renderSheet();
+    if(boxRecipe) renderBoxSheet();
   }
 
   function setTab(t){
@@ -984,6 +1182,7 @@ h2{font-size:1.15rem;font-weight:700}
     TABS.forEach(x=>{ $("v-"+x).hidden = x!==t; });
     document.querySelectorAll(".nav button").forEach(b=>{ if(b.dataset.tab===t) b.setAttribute("aria-current","page"); else b.removeAttribute("aria-current"); });
     renderHeader(); window.scrollTo(0,0);
+    if(t==="box" && !BX.searched && !BX.busy) runBoxSearch();
     try{ history.replaceState(null,"","#"+t); }catch(e){}
   }
   function openSheet(id){ openId = id; $("scrim").hidden = false; $("sheet").hidden = false; $("noteInput").value = ""; renderSheet(); $("sheet").scrollTop = 0; }
@@ -1013,15 +1212,21 @@ h2{font-size:1.15rem;font-weight:700}
     }
   }
 
-  const TABS = ["today","plan","shop","deals","feedback","settings","muse"];
+  const TABS = ["today","plan","shop","deals","box","settings","muse"];
   document.addEventListener("click", e=>{
-    const tb = e.target.closest("[data-tab]"); if(tb){ setTab(tb.dataset.tab); return; }
+    const tb = e.target.closest("[data-tab]"); if(tb){ if(boxRecipe) closeBoxSheet(); setTab(tb.dataset.tab); return; }
     if(e.target.id==="scrim"){ closeSheet(); return; }
+    if(e.target.id==="boxScrim"){ closeBoxSheet(); return; }
     if(e.target.id==="copyScrim"){ $("copyScrim").hidden = true; $("copySheet").hidden = true; return; }
     const b = e.target.closest("[data-act]"); if(!b) return;
     const id = b.dataset.id, act = b.dataset.act;
     if(act==="open") openSheet(id);
     else if(act==="close") closeSheet();
+    else if(act==="boxSource"){ BX.source = b.dataset.v; runBoxSearch(); }
+    else if(act==="boxOpen"){ const r = BX.results[+b.dataset.i]; if(r) openBoxSheet(r); }
+    else if(act==="boxClose") closeBoxSheet();
+    else if(act==="boxPlace") placeRecipe(b.dataset.date);
+    else if(act==="boxDelete") deleteBoxRecipe();
     else if(act==="awake") toggleAwake();
     else if(act==="fullscreen") toggleFullscreen();
     else if(act==="automation"){
@@ -1036,7 +1241,7 @@ h2{font-size:1.15rem;font-weight:700}
     else if(act==="closeCopy"){ $("copyScrim").hidden = true; $("copySheet").hidden = true; }
     else if(act==="push") pushBack(id, +b.dataset.n);
     else if(act==="undo"){ const fn = toastUndo; toastUndo = null; $("toast").hidden = true; if(fn) fn(); }
-    else if(act==="tick"){ const k = b.dataset.k; if(checked.has(k)) checked.delete(k); else checked.add(k); renderSheet(); }
+    else if(act==="tick"){ const k = b.dataset.k; if(checked.has(k)) checked.delete(k); else checked.add(k); if(openId) renderSheet(); if(boxRecipe) renderBoxSheet(); }
     else if(act==="rate"){ const m = findMeal(id); if(!m) return; const v = +b.dataset.v; save(()=>mref(m).update({rating: m.rating===v ? 0 : v}), "Rating saved"); }
     else if(act==="thaw"){ const m = findMeal(id); if(m) save(()=>mref(m).update({thawDone:true}), "Marked as thawing"); }
     else if(act==="swapout"){ const m = findMeal(id); if(m) replaceMeal(m); }
@@ -1069,7 +1274,7 @@ h2{font-size:1.15rem;font-weight:700}
     }
     else if(act==="delIdea") save(()=>db.doc("ideas/"+id).delete());
   });
-  document.addEventListener("keydown", e=>{ if(e.key==="Escape" && openId) closeSheet(); });
+  document.addEventListener("keydown", e=>{ if(e.key==="Escape"){ if(boxRecipe) closeBoxSheet(); else if(openId) closeSheet(); } });
 
   // Wires a one-box add form: saves the trimmed text, then clears the box.
   const onAdd = (form, input, add, ok) => form.addEventListener("submit", async e=>{
@@ -1102,8 +1307,12 @@ h2{font-size:1.15rem;font-weight:700}
 
   $("settingsForm").addEventListener("input", ()=>{ settingsDirty = true; });
   $("settingsForm").addEventListener("submit", e=>{ e.preventDefault(); saveSettings(); });
+  $("boxSearchForm").addEventListener("submit", e=>{ e.preventDefault(); runBoxSearch(); });
+  $("boxQuery").addEventListener("input", ()=>{ clearTimeout(boxTimer); boxTimer = setTimeout(runBoxSearch, 350); });
+  $("recipeForm").addEventListener("submit", addBoxRecipe);
 
-  const h0 = (location.hash||"").slice(1);
+  // #feedback is the old name for what's now in Settings.
+  const h0 = (location.hash||"").slice(1).replace(/^feedback$/, "settings");
   setTab(TABS.includes(h0) ? h0 : "today");
   render();
 
@@ -1131,6 +1340,7 @@ h2{font-size:1.15rem;font-weight:700}
     db.doc("settings/planDraft").onSnapshot(s=>{ const was = S.planDraft && S.planDraft.status; S.planDraft = s.exists ? s.data() : null; render(); if(S.planDraft && S.planDraft.status!==was) refreshRecipeCount(); }, ()=>{});
     db.doc("ads/current").onSnapshot(s=>{ S.ads = s.exists ? s.data() : null; render(); }, ()=>{});
     refreshRecipeCount();
+    if(tab==="box") runBoxSearch();
   })();
 })();
 </script>

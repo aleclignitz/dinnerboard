@@ -83,6 +83,7 @@ docs/                       The board, served as-is by GitHub Pages (no build st
   config.js                   Supabase URL + publishable key
   supabase-adapter.js         Board <-> Supabase bridge, sign-in gate, realtime
 sql/schema.sql              `documents` + `recipes` tables, Row Level Security, realtime
+sql/migrations/             Schema changes to run after schema.sql, in name order (e.g. the Recipe Box)
 supabase/functions/dispatch-workflow/  Edge function the board uses to start allow-listed workflows
 scripts/                    One entry script per job (all run by GitHub Actions unless noted)
   fetch-flipp-ad.mjs          Primary ad source: Flipp JSON -> ads/current
@@ -91,7 +92,7 @@ scripts/                    One entry script per job (all run by GitHub Actions 
   replace-meal.mjs            Swaps in new recipes for meals marked Replace
   grocery-list.mjs            Finalizes swaps and builds the grocery list
   capture-tomthumb-session.mjs  Local: saves a Tom Thumb browser session for the fallback
-  load-recipes.mjs            Local: loads the recipe dataset into Supabase
+  load-recipes.mjs            Local: loads a recipe staging file (NYT or Paprika) into Supabase
   rebuild-grocery-list.mjs    Local recovery: rebuilds the list for the active plan
   dev-test-picker.mjs         Local smoke test for the recipe picker
 scripts/lib/                Shared logic, one owner per concern:
@@ -104,6 +105,7 @@ scripts/lib/                Shared logic, one owner per concern:
   flipp.mjs                   Flipp client and ad normalizer
   claude.mjs                  Claude Messages API wrapper + JSON parsing
 tools/import_recipes.py     Converts an nyt-cooking-parser sqlite export into staging JSON
+tools/import_paprika.py     Converts a Paprika .paprikarecipes export into staging JSON
 test/                       Unit tests (Node's built-in runner, no network)
 .github/workflows/          Scheduled jobs, replace-meal, and Tests (runs on every push)
 ```
@@ -117,7 +119,7 @@ test/                       Unit tests (Node's built-in runner, no network)
 
 ## Setup
 
-1. **Supabase:** create a project, run [sql/schema.sql](sql/schema.sql) in the SQL editor, and enable realtime for `documents` (Database → Replication).
+1. **Supabase:** create a project, run [sql/schema.sql](sql/schema.sql) in the SQL editor, then every file in [sql/migrations/](sql/migrations/) in name order, and enable realtime for `documents` (Database → Replication).
 2. **Keys:** put the project URL and **publishable key** (`sb_publishable_...`) in [docs/config.js](docs/config.js); it is safe to commit because RLS restricts it. Keep the **secret key** (`sb_secret_...`) out of the repo; it goes only in Actions secrets and your local `.env`.
 3. **GitHub Pages:** Settings → Pages → Deploy from branch → `main` / `docs`. The site has no build step: edit `docs/` and commit.
 4. **Actions secrets** (Settings → Secrets and variables → Actions): `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `ANTHROPIC_API_KEY`, and `TOM_THUMB_STORAGE_STATE` (fallback scraper only).
@@ -138,15 +140,23 @@ test/                       Unit tests (Node's built-in runner, no network)
 
 The board's **Settings** tab replaces manual database seeding:
 
-1. **Load your recipes:** the `recipes` table is a fixed, read-only dataset - Claude never writes to it. Load it once (or add more later) with `tools/import_recipes.py` + `scripts/load-recipes.mjs` (see **Recipe dataset** below). The Settings tab shows how many recipes are loaded, and **Manually fetch weekly recipes from recipe box** lets you draft this week's plan from that dataset on demand instead of waiting for the plan day.
+1. **Load your recipes:** Claude never writes to the `recipes` table. Load the NYT dataset and/or a Paprika export once (or add more later) with the tools under **Recipe dataset** below; you can also add recipes one at a time on the **Recipe Box** tab. The Settings tab shows how many recipes are loaded, and **Manually fetch weekly recipes from recipe box** lets you draft this week's plan from them on demand instead of waiting for the plan day.
 2. **Pick a start date:** nothing is planned before it. Leave it blank to start tomorrow. It only affects the first plan.
 3. **Turn on automation:** off by default, so nothing runs or costs anything until you switch it on.
 
-Below the checklist you can edit planning guidelines, longest cook time, grocery store, order method (delivery or pickup), pickup window, substitution rules, Tom Thumb ZIP and store address. Saved values apply to the next weekly run. **Clear all planned meals** (here, and at the bottom of the Plan tab) removes every planned meal; past meals and ratings are kept and the next weekly run drafts a fresh plan.
+Below the checklist are **Requests for the next plan** (meals to try, things to skip; Claude reads them before writing the next week) and **Cook-night ratings**. Then you can edit planning guidelines, longest cook time, grocery store, order method (delivery or pickup), pickup window, substitution rules, Tom Thumb ZIP and store address. Saved values apply to the next weekly run. **Clear all planned meals** (here, and at the bottom of the Plan tab) removes every planned meal; past meals and ratings are kept and the next weekly run drafts a fresh plan.
 
 On the Shopping tab, **Add many at once** under Staples takes a pasted comma- or line-separated list and skips items already listed.
 
 Staples and freezer items are managed on the Shopping tab; there is no need to insert them by hand.
+
+## Recipe Box tab
+
+- **Search** every recipe (NYT Cooking, your Paprika recipes and recipes you've added) by name, ingredient, tag or cookbook; filter by where it came from. Every word you type must match somewhere. Your own recipes are listed first.
+- **Add to the plan:** open a recipe and pick a night, from tonight through the end of the next plan. That night's meal is replaced with the recipe (a night off becomes a cook night), and it shows a **Your pick** chip on the Plan tab. Picks in the next plan go on that plan's grocery list; if the list is already built, press **Rebuild list**. The current week's groceries are already bought, so add anything missing to the next order.
+- **Add a recipe by hand:** name and ingredients are required; link, kind of dish, main protein, servings, time, steps, notes and tags are optional. Main dishes can also be picked by the weekly planner. Recipes added here can be deleted from their recipe sheet; imported recipes can't be changed from the board.
+
+Search and manual adds need [sql/migrations/2026-11-16-recipe-box.sql](sql/migrations/2026-11-16-recipe-box.sql).
 ### Local commands
 
 ```
@@ -183,7 +193,7 @@ A real browser opens. In it: dismiss the cookie banner, open the top-left menu, 
 
 ## Recipe dataset
 
-Recipes live in the Supabase `recipes` table, ported from the sqlite db produced by the separate nyt-cooking-parser project. Each row has `title`, `url`, `description`, `tags`, `rating`, `rating_count`, a derived `course` (`entree` / `side` / `other`) and `protein` (`chicken` / `beef` / `pork` / `turkey` / `lamb` / `fish` / `vegetarian` / `null`), plus the board's recipe shape (`serves`, `time_minutes`, `oven`, `ingredients`, `steps`, `tip`).
+Recipes live in the Supabase `recipes` table. `source` says where each came from: `nyt` (ported from the sqlite db produced by the separate nyt-cooking-parser project), `paprika` (a Paprika app export) or `manual` (added on the Recipe Box tab). Each row has `title`, `url`, `description`, `credit` (cookbook or site, for Paprika), `tags`, `rating`, `rating_count`, a derived `course` (`entree` / `side` / `other`) and `protein` (`chicken` / `beef` / `pork` / `turkey` / `lamb` / `fish` / `vegetarian` / `null`), plus the board's recipe shape (`serves`, `time_minutes`, `oven`, `ingredients`, `steps`, `tip`). NYT rows keep their NYT ids; everything else gets ids from 2,000,000,000 up.
 
 > If your `recipes` table predates `course`/`protein`, add them:
 > ```sql
@@ -191,22 +201,29 @@ Recipes live in the Supabase `recipes` table, ported from the sqlite db produced
 > alter table recipes add column if not exists protein text;
 > ```
 
-To load or refresh the dataset (re-running is safe; it upserts by `id`):
+To load or refresh the NYT dataset (re-running is safe; it upserts by `id`):
 
 ```
 python tools/import_recipes.py <path-to-recipes.db> .recipes-staging.json
 node --env-file=.env scripts/load-recipes.mjs .recipes-staging.json
 ```
 
-The staging JSON is gitignored.
+To load or refresh a Paprika export (in Paprika: select recipes → Export → Paprika Recipe Format). Re-running is safe: rows match on Paprika's recipe uid, so edited recipes update in place. Paprika categories are sparse, so `course` and `protein` are inferred from categories, title and ingredients:
+
+```
+python tools/import_paprika.py "<export>.paprikarecipes" .paprika-staging.json
+node --env-file=.env scripts/load-recipes.mjs .paprika-staging.json
+```
+
+Staging files and `.paprikarecipes` exports are gitignored (exports can contain cookbook recipes, so keep them out of a public repo). On a network that inspects TLS (Node errors with `unable to get local issuer certificate`), add `--use-system-ca` after `node`.
 
 ## How recipes get picked
 
 For every cook night, [scripts/lib/recipePicker.mjs](scripts/lib/recipePicker.mjs) runs:
 
 1. Claude drafts the plan skeleton with a target protein per cook night.
-2. `pickCandidates` queries Supabase for up to 10 entrees matching the protein, `time_minutes <= PLAN_MAX_COOK_MINUTES` and `rating >= 4`, excluding recipes used recently or earlier in the draft. The order is deterministic (rating desc, id asc). If nothing matches, it relaxes the rating floor, then the time cap, then the protein.
-3. Claude reviews the shortlist against guidelines, history, freezer and staples. It either accepts one (writing `details` and `thaw` instructions) or rejects the batch with a reason. On rejection those ids are excluded and it retries, up to 3 rounds.
+2. `pickCandidates` queries Supabase for up to 10 entrees matching the protein and `time_minutes <= PLAN_MAX_COOK_MINUTES`, excluding recipes used recently or earlier in the draft. Up to 3 slots go to your own recipes (Paprika and manual, no rating floor since they're mostly unrated); the rest are NYT recipes with `rating >= 4`. The order is deterministic (rating desc, id asc). If nothing matches, it relaxes the rating floor, then the time cap, then the protein.
+3. Claude reviews the shortlist against guidelines, history, freezer and staples, preferring your own recipes when they fit equally well. It either accepts one (writing `details` and `thaw` instructions) or rejects the batch with a reason. On rejection those ids are excluded and it retries, up to 3 rounds.
 4. If nothing is accepted, `generateFreeformRecipe` has Claude write a recipe from scratch, so a meal is never left without one.
 
 `sourceRecipeId` is saved on each meal so future runs can exclude recipes already used.
